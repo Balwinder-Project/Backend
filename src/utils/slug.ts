@@ -11,3 +11,4 @@ export function generateSlug(text: string): string {
     .replace(/^-+|-+$/g, ''); // Remove leading/trailing hyphens
 }
 
+

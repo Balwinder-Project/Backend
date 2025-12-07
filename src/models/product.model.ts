@@ -88,3 +88,4 @@ const Product = mongoose.model<IProduct>('Product', productSchema);
 
 export default Product;
 
+
