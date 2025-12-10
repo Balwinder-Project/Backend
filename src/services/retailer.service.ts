@@ -1,5 +1,6 @@
 import { auth } from '../config/firebase';
 import Retailer, { IRetailer } from '../models/retailer.model';
+import { WalletService } from './wallet.service';
 
 interface CreateRetailerData {
   name: string;
@@ -54,6 +55,18 @@ export class RetailerService {
         phone: data.phone,
         firebaseUid: userRecord.uid
       });
+
+      // Create wallet for the new retailer
+      try {
+        await WalletService.createWallet({
+          ownerId: retailer._id.toString(),
+          ownerType: 'retailer'
+        });
+      } catch (walletError) {
+        console.error('Failed to create wallet for retailer:', walletError);
+        // Don't fail retailer creation if wallet creation fails
+        // Wallet can be created manually later if needed
+      }
 
       return retailer;
     } catch (error: any) {

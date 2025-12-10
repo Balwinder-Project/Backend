@@ -6,8 +6,18 @@ import {
   getDocument,
   setDocument,
 } from '../utils/firebase.utils';
+import { googleSignIn } from '../controllers/user.controller';
+import { validateRequest } from '../middleware/validateRequest';
+import { googleSignInValidator } from '../validators/user.validator';
 
 const router = Router();
+
+/**
+ * @route   POST /api/v1/auth/google-signin
+ * @desc    Google sign-in - create or get user
+ * @access  Public
+ */
+router.post('/google-signin', googleSignInValidator, validateRequest, googleSignIn);
 
 /**
  * @route   GET /api/auth/me
