@@ -70,3 +70,6 @@ const Wallet = mongoose.model<IWallet>('Wallet', walletSchema);
 export default Wallet;
 
 
+
+
+

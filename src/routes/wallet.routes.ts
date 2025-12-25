@@ -21,3 +21,6 @@ router.post('/:ownerType/:ownerId/deduct', deductWalletValidator, validateReques
 export default router;
 
 
+
+
+
