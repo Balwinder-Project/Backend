@@ -7,6 +7,7 @@ import categoryRoutes from './category.routes';
 import tagRoutes from './tag.routes';
 import productRoutes from './product.routes';
 import walletRoutes from './wallet.routes';
+import uploadRoutes from './upload.routes';
 
 const router = Router();
 
@@ -22,6 +23,7 @@ router.use(`${API_VERSION}/categories`, categoryRoutes);
 router.use(`${API_VERSION}/tags`, tagRoutes);
 router.use(`${API_VERSION}/products`, productRoutes);
 router.use(`${API_VERSION}/wallets`, walletRoutes);
+router.use(`${API_VERSION}/upload`, uploadRoutes);
 
 // API info endpoint
 router.get('/', (_req, res) => {
@@ -37,7 +39,8 @@ router.get('/', (_req, res) => {
       categories: `${API_VERSION}/categories`,
       tags: `${API_VERSION}/tags`,
       products: `${API_VERSION}/products`,
-      wallets: `${API_VERSION}/wallets`
+      wallets: `${API_VERSION}/wallets`,
+      upload: `${API_VERSION}/upload`
     }
   });
 });
