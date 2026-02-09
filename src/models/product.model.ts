@@ -10,6 +10,7 @@ export interface IProduct extends Document {
   tags: mongoose.Types.ObjectId[];
   stock: number;
   isActive: boolean;
+  customFields?: any;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -64,6 +65,10 @@ const productSchema = new Schema<IProduct>(
     isActive: {
       type: Boolean,
       default: true,
+    },
+    customFields: {
+      type: Schema.Types.Mixed,
+      default: null,
     },
   },
   {

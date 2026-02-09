@@ -5,6 +5,7 @@ export interface ICategory extends Document {
   description?: string;
   slug: string;
   isActive: boolean;
+  fieldTemplate?: any;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -34,6 +35,10 @@ const categorySchema = new Schema<ICategory>(
     isActive: {
       type: Boolean,
       default: true,
+    },
+    fieldTemplate: {
+      type: Schema.Types.Mixed,
+      default: null,
     },
   },
   {

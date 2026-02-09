@@ -7,7 +7,7 @@ import { ProductService } from '../services/product.service';
  */
 export const createProduct = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { name, description, price, sku, images, category, tags, stock, isActive } = req.body;
+    const { name, description, price, sku, images, category, tags, stock, isActive, customFields } = req.body;
 
     const product = await ProductService.createProduct({
       name,
@@ -18,7 +18,8 @@ export const createProduct = async (req: Request, res: Response): Promise<void> 
       category,
       tags: tags || [],
       stock: stock !== undefined ? stock : 0,
-      isActive: isActive !== undefined ? isActive : true
+      isActive: isActive !== undefined ? isActive : true,
+      customFields: customFields || null
     });
 
     res.status(201).json({
@@ -136,7 +137,7 @@ export const getProductById = async (req: Request, res: Response): Promise<void>
 export const updateProduct = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const { name, description, price, sku, images, category, tags, stock, isActive } = req.body;
+    const { name, description, price, sku, images, category, tags, stock, isActive, customFields } = req.body;
 
     const updateData: any = {};
     if (name) updateData.name = name;
@@ -148,6 +149,7 @@ export const updateProduct = async (req: Request, res: Response): Promise<void> 
     if (tags !== undefined) updateData.tags = tags;
     if (stock !== undefined) updateData.stock = stock;
     if (isActive !== undefined) updateData.isActive = isActive;
+    if (customFields !== undefined) updateData.customFields = customFields;
 
     const product = await ProductService.updateProduct(id, updateData);
 

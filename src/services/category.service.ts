@@ -53,6 +53,13 @@ export class CategoryService {
   }
 
   /**
+   * Get category by slug
+   */
+  static async getCategoryBySlug(slug: string): Promise<ICategory | null> {
+    return await Category.findOne({ slug });
+  }
+
+  /**
    * Update category
    */
   static async updateCategory(id: string, data: Partial<ICategory>): Promise<ICategory | null> {
