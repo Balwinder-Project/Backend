@@ -343,12 +343,15 @@ export const razorpayWebhook = async (req: Request, res: Response): Promise<void
       const razorpayPaymentId: string = paymentEntity.id;
       const razorpayOrderId: string = paymentEntity.order_id;
 
-      // Extract userId from order notes (most reliable) or fall back to receipt parsing
-      const userId = orderEntity?.notes?.userId || null;
+      // Razorpay copies order notes onto the payment entity.
+      // Check payment notes first (always present), then order entity notes as fallback.
+      const userId: string | null =
+        paymentEntity.notes?.userId ||
+        orderEntity?.notes?.userId ||
+        null;
 
       if (!userId) {
-        console.error('Could not extract userId from order notes. orderId:', razorpayOrderId);
-        // Still return 200 so Razorpay doesn't retry
+        console.error('Could not extract userId from notes. orderId:', razorpayOrderId, '| paymentNotes:', paymentEntity.notes);
         res.status(200).json({ success: true, message: 'Webhook received, userId extraction failed' });
         return;
       }
