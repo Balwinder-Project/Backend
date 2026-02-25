@@ -1,5 +1,7 @@
 import { Request, Response } from 'express';
+import crypto from 'crypto';
 import { WalletService } from '../services/wallet.service';
+import { RazorpayService } from '../services/razorpay.service';
 
 /**
  * Get wallet balance
@@ -76,7 +78,7 @@ export const topUpWallet = async (req: Request, res: Response): Promise<void> =>
     });
   } catch (error: any) {
     console.error('Error topping up wallet:', error);
-    
+
     if (error.message === 'Wallet not found') {
       res.status(404).json({
         success: false,
@@ -128,7 +130,7 @@ export const deductFromWallet = async (req: Request, res: Response): Promise<voi
     });
   } catch (error: any) {
     console.error('Error deducting from wallet:', error);
-    
+
     if (error.message === 'Wallet not found') {
       res.status(404).json({
         success: false,
@@ -185,7 +187,7 @@ export const getWalletTransactions = async (req: Request, res: Response): Promis
     });
   } catch (error: any) {
     console.error('Error fetching wallet transactions:', error);
-    
+
     if (error.message === 'Wallet not found') {
       res.status(404).json({
         success: false,
@@ -249,9 +251,127 @@ export const getWalletDetails = async (req: Request, res: Response): Promise<voi
   }
 };
 
+/**
+ * Create a Razorpay order for wallet top-up
+ * POST /api/v1/wallets/razorpay/create-order
+ * Requires authentication
+ */
+export const createRazorpayOrder = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { amount, userId } = req.body;
 
+    if (!amount || typeof amount !== 'number' || amount <= 0) {
+      res.status(400).json({
+        success: false,
+        message: 'Invalid amount. Must be a positive number (in ₹).'
+      });
+      return;
+    }
 
+    if (!userId) {
+      res.status(400).json({
+        success: false,
+        message: 'userId is required'
+      });
+      return;
+    }
 
+    // Amount in paise (1 ₹ = 100 paise)
+    const amountInPaise = Math.round(amount * 100);
+    // Razorpay receipt max length is 40 chars.
+    // Format: wp_<last8ofUserId>_<epochSeconds> → always ≤ 25 chars.
+    // We also store userId in order metadata so the webhook can look it up.
+    const shortUserId = userId.slice(-8);
+    const epochSec = Math.floor(Date.now() / 1000);
+    const receipt = `wp_${shortUserId}_${epochSec}`;
 
+    const order = await RazorpayService.createOrder(amountInPaise, 'INR', receipt, {
+      userId,
+    });
 
+    res.status(200).json({
+      success: true,
+      data: {
+        orderId: order.id,
+        amount: order.amount,
+        currency: order.currency,
+        keyId: process.env.RAZORPAY_KEY_ID
+      }
+    });
+  } catch (error: any) {
+    console.error('Error creating Razorpay order:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to create payment order',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
 
+/**
+ * Razorpay Webhook handler — credits wallet on payment.captured event
+ * POST /api/v1/wallets/razorpay/webhook
+ * No auth middleware — verified via HMAC signature
+ */
+export const razorpayWebhook = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
+    const signature = req.headers['x-razorpay-signature'] as string;
+
+    // Verify webhook signature if secret is configured
+    if (webhookSecret && signature) {
+      const rawBody = JSON.stringify(req.body);
+      const expectedSignature = crypto
+        .createHmac('sha256', webhookSecret)
+        .update(rawBody)
+        .digest('hex');
+
+      if (expectedSignature !== signature) {
+        console.warn('Invalid Razorpay webhook signature');
+        res.status(400).json({ success: false, message: 'Invalid signature' });
+        return;
+      }
+    }
+
+    const event = req.body?.event;
+    const paymentEntity = req.body?.payload?.payment?.entity;
+    const orderEntity = req.body?.payload?.order?.entity;
+
+    if (event === 'payment.captured' && paymentEntity) {
+      const amountInPaise: number = paymentEntity.amount;
+      const amountInRupees = amountInPaise / 100;
+      const razorpayPaymentId: string = paymentEntity.id;
+      const razorpayOrderId: string = paymentEntity.order_id;
+
+      // Extract userId from order notes (most reliable) or fall back to receipt parsing
+      const userId = orderEntity?.notes?.userId || null;
+
+      if (!userId) {
+        console.error('Could not extract userId from order notes. orderId:', razorpayOrderId);
+        // Still return 200 so Razorpay doesn't retry
+        res.status(200).json({ success: true, message: 'Webhook received, userId extraction failed' });
+        return;
+      }
+
+      await WalletService.topUpWallet(userId, 'user', {
+        amount: amountInRupees,
+        description: 'Wallet Top-up via Razorpay',
+        performedByType: 'user',
+        performedBy: userId,
+        metadata: {
+          razorpayPaymentId,
+          razorpayOrderId,
+        }
+      });
+
+      console.log(`Wallet credited ₹${amountInRupees} for user ${userId} (payment: ${razorpayPaymentId})`);
+    }
+
+    // Always return 200 to acknowledge receipt
+    res.status(200).json({ success: true, message: 'Webhook processed' });
+  } catch (error: any) {
+    console.error('Error processing Razorpay webhook:', error);
+    // Return 200 even on error to prevent Razorpay from retrying
+    res.status(200).json({ success: true, message: 'Webhook received with errors' });
+  }
+};
