@@ -5,7 +5,7 @@ import { Request, Response, NextFunction } from 'express';
  */
 export const validateProductData = (isUpdate: boolean = false) => {
   return (req: Request, res: Response, next: NextFunction): void => {
-    const { name, description, price, sku, category, tags, stock, images } = req.body;
+    const { name, description, price, sku, category, tags, stock, images, normalUserPricing, retailerPricing } = req.body;
     const errors: string[] = [];
 
     // Validate name
@@ -74,6 +74,50 @@ export const validateProductData = (isUpdate: boolean = false) => {
     if (images !== undefined) {
       if (!Array.isArray(images)) {
         errors.push('Images must be an array');
+      }
+    }
+
+    // Validate normalUserPricing (optional array of slabs)
+    if (normalUserPricing !== undefined) {
+      if (!Array.isArray(normalUserPricing)) {
+        errors.push('normalUserPricing must be an array');
+      } else {
+        normalUserPricing.forEach((slab: any, i: number) => {
+          if (typeof slab.minQuantity !== 'number' || slab.minQuantity < 1) {
+            errors.push(`normalUserPricing[${i}].minQuantity must be a number >= 1`);
+          }
+          if (typeof slab.price !== 'number' || slab.price < 0) {
+            errors.push(`normalUserPricing[${i}].price must be a non-negative number`);
+          }
+        });
+      }
+    }
+
+    // Validate retailerPricing (optional object)
+    if (retailerPricing !== undefined) {
+      if (typeof retailerPricing !== 'object' || retailerPricing === null) {
+        errors.push('retailerPricing must be an object');
+      } else {
+        if (
+          retailerPricing.minimumOrderQuantity !== undefined &&
+          (typeof retailerPricing.minimumOrderQuantity !== 'number' || retailerPricing.minimumOrderQuantity < 1)
+        ) {
+          errors.push('retailerPricing.minimumOrderQuantity must be a number >= 1');
+        }
+        if (retailerPricing.slabs !== undefined) {
+          if (!Array.isArray(retailerPricing.slabs)) {
+            errors.push('retailerPricing.slabs must be an array');
+          } else {
+            retailerPricing.slabs.forEach((slab: any, i: number) => {
+              if (typeof slab.minQuantity !== 'number' || slab.minQuantity < 1) {
+                errors.push(`retailerPricing.slabs[${i}].minQuantity must be a number >= 1`);
+              }
+              if (typeof slab.price !== 'number' || slab.price < 0) {
+                errors.push(`retailerPricing.slabs[${i}].price must be a non-negative number`);
+              }
+            });
+          }
+        }
       }
     }
 

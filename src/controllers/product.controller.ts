@@ -7,7 +7,7 @@ import { ProductService } from '../services/product.service';
  */
 export const createProduct = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { name, description, price, sku, images, category, tags, stock, isActive, customFields } = req.body;
+    const { name, description, price, sku, images, category, tags, stock, isActive, customFields, normalUserPricing, retailerPricing, weight, length, breadth, height } = req.body;
 
     const product = await ProductService.createProduct({
       name,
@@ -19,8 +19,14 @@ export const createProduct = async (req: Request, res: Response): Promise<void> 
       tags: tags || [],
       stock: stock !== undefined ? stock : 0,
       isActive: isActive !== undefined ? isActive : true,
-      customFields: customFields || null
-    });
+      customFields: customFields || null,
+      normalUserPricing: normalUserPricing || [],
+      retailerPricing: retailerPricing || { minimumOrderQuantity: 1, slabs: [] },
+      weight: weight !== undefined ? weight : 0.5,
+      length: length !== undefined ? length : 10,
+      breadth: breadth !== undefined ? breadth : 10,
+      height: height !== undefined ? height : 5,
+    } as any);
 
     res.status(201).json({
       success: true,
@@ -137,7 +143,7 @@ export const getProductById = async (req: Request, res: Response): Promise<void>
 export const updateProduct = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const { name, description, price, sku, images, category, tags, stock, isActive, customFields } = req.body;
+    const { name, description, price, sku, images, category, tags, stock, isActive, customFields, normalUserPricing, retailerPricing, weight, length, breadth, height } = req.body;
 
     const updateData: any = {};
     if (name) updateData.name = name;
@@ -150,6 +156,12 @@ export const updateProduct = async (req: Request, res: Response): Promise<void> 
     if (stock !== undefined) updateData.stock = stock;
     if (isActive !== undefined) updateData.isActive = isActive;
     if (customFields !== undefined) updateData.customFields = customFields;
+    if (normalUserPricing !== undefined) updateData.normalUserPricing = normalUserPricing;
+    if (retailerPricing !== undefined) updateData.retailerPricing = retailerPricing;
+    if (weight !== undefined) updateData.weight = weight;
+    if (length !== undefined) updateData.length = length;
+    if (breadth !== undefined) updateData.breadth = breadth;
+    if (height !== undefined) updateData.height = height;
 
     const product = await ProductService.updateProduct(id, updateData);
 

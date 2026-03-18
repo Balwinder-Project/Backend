@@ -1,5 +1,15 @@
 import mongoose, { Document, Schema } from 'mongoose';
 
+export interface IPricingSlab {
+  minQuantity: number;
+  price: number;
+}
+
+export interface IRetailerPricing {
+  minimumOrderQuantity: number;
+  slabs: IPricingSlab[];
+}
+
 export interface IProduct extends Document {
   name: string;
   description?: string;
@@ -11,6 +21,12 @@ export interface IProduct extends Document {
   stock: number;
   isActive: boolean;
   customFields?: any;
+  normalUserPricing: IPricingSlab[];
+  retailerPricing: IRetailerPricing;
+  weight: number;
+  length: number;
+  breadth: number;
+  height: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -69,6 +85,47 @@ const productSchema = new Schema<IProduct>(
     customFields: {
       type: Schema.Types.Mixed,
       default: null,
+    },
+    normalUserPricing: {
+      type: [
+        {
+          minQuantity: { type: Number, required: true, min: [1, 'Minimum quantity must be at least 1'] },
+          price: { type: Number, required: true, min: [0, 'Price cannot be negative'] },
+        },
+      ],
+      default: [],
+    },
+    retailerPricing: {
+      minimumOrderQuantity: { type: Number, default: 1, min: [1, 'Minimum order quantity must be at least 1'] },
+      slabs: {
+        type: [
+          {
+            minQuantity: { type: Number, required: true, min: [1, 'Minimum quantity must be at least 1'] },
+            price: { type: Number, required: true, min: [0, 'Price cannot be negative'] },
+          },
+        ],
+        default: [],
+      },
+    },
+    weight: {
+      type: Number,
+      default: 0.5,
+      min: [0.01, 'Weight must be greater than 0'],
+    },
+    length: {
+      type: Number,
+      default: 10,
+      min: [0, 'Length cannot be negative'],
+    },
+    breadth: {
+      type: Number,
+      default: 10,
+      min: [0, 'Breadth cannot be negative'],
+    },
+    height: {
+      type: Number,
+      default: 5,
+      min: [0, 'Height cannot be negative'],
     },
   },
   {

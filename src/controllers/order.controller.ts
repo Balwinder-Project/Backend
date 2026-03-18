@@ -1,0 +1,319 @@
+import { Request, Response } from 'express';
+import mongoose from 'mongoose';
+import User from '../models/user.model';
+import Product from '../models/product.model';
+import { OrderService } from '../services/order.service';
+import { WalletService } from '../services/wallet.service';
+import { ShiprocketService } from '../services/shiprocket.service';
+import { IEmbeddedAddress, IOrderItem } from '../models/order.model';
+
+const PICKUP_POSTCODE = process.env.SHIPROCKET_PICKUP_POSTCODE || '';
+const PICKUP_LOCATION = process.env.SHIPROCKET_PICKUP_LOCATION_NAME || 'Primary';
+
+// Helper: resolve internal MongoDB user _id from Firebase UID
+async function resolveUserId(firebaseUid: string): Promise<string> {
+  const user = await User.findOne({ firebaseUid });
+  if (!user) throw new Error('User not found');
+  return (user._id as any).toString();
+}
+
+export const getShippingRates = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { deliveryPincode, items } = req.body as {
+      deliveryPincode: string;
+      items: Array<{ productId: string; quantity: number }>;
+    };
+
+    if (!PICKUP_POSTCODE) {
+      res.status(500).json({ success: false, message: 'Pickup postcode not configured on server' });
+      return;
+    }
+
+    // Calculate total weight from products
+    const productIds = items.map((i) => i.productId);
+    const products = await Product.find({ _id: { $in: productIds } });
+
+    let totalWeight = 0;
+    for (const item of items) {
+      const product = products.find((p) => (p._id as any).toString() === item.productId);
+      const weight = product?.weight ?? 0.5;
+      totalWeight += weight * item.quantity;
+    }
+
+    const rates = await ShiprocketService.getShippingRates(PICKUP_POSTCODE, deliveryPincode, totalWeight);
+
+    res.status(200).json({
+      success: true,
+      message: 'Shipping rates fetched successfully',
+      data: { rates, totalWeight },
+    });
+  } catch (error: any) {
+    console.error('Get shipping rates error:', error);
+    res.status(500).json({ success: false, message: error.message || 'Failed to fetch shipping rates' });
+  }
+};
+
+export const createOrder = async (req: Request, res: Response): Promise<void> => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const userId = await resolveUserId(req.user!.uid);
+
+    const {
+      items,
+      shippingAddress,
+      billingAddress,
+      shippingCharge,
+      notes,
+    } = req.body as {
+      items: Array<{ productId: string; quantity: number; price: number; variant?: string }>;
+      shippingAddress: IEmbeddedAddress;
+      billingAddress: IEmbeddedAddress;
+      shippingCharge: number;
+      notes?: string;
+    };
+
+    // Enrich items with product name, sku, weight
+    const productIds = items.map((i) => i.productId);
+    const products = await Product.find({ _id: { $in: productIds } });
+
+    const orderItems: IOrderItem[] = items.map((item) => {
+      const product = products.find((p) => (p._id as any).toString() === item.productId);
+      return {
+        productId: new mongoose.Types.ObjectId(item.productId),
+        name: product?.name ?? 'Unknown Product',
+        sku: product?.sku ?? '',
+        quantity: item.quantity,
+        price: item.price,
+        variant: item.variant,
+        weight: (product?.weight ?? 0.5) * item.quantity,
+      };
+    });
+
+    const subtotal = orderItems.reduce((sum, i) => sum + i.price * i.quantity, 0);
+    const total = subtotal + shippingCharge;
+
+    // 1. Deduct wallet (within session)
+    const { transaction } = await WalletService.recordPurchase(
+      userId,
+      'user',
+      total,
+      `Payment for order`,
+      {},
+      session
+    );
+
+    // 2. Create order (within session)
+    const order = await OrderService.createOrder(
+      userId,
+      {
+        items: orderItems,
+        shippingAddress,
+        billingAddress,
+        subtotal,
+        shippingCharge,
+        total,
+        notes,
+      },
+      session
+    );
+
+    // Link wallet transaction
+    await order.updateOne({ walletTransactionId: transaction._id }, { session });
+
+    await session.commitTransaction();
+
+    // 3. Create Shiprocket order AFTER commit — fire-and-forget (external HTTP, non-transactional)
+    const orderDate = new Date().toISOString().split('T')[0];
+    ShiprocketService.createOrder({
+      order_id: order.orderNumber,
+      order_date: orderDate,
+      pickup_location: PICKUP_LOCATION,
+      billing_customer_name: billingAddress.name,
+      billing_address: billingAddress.addressLine1,
+      billing_address_2: billingAddress.addressLine2,
+      billing_city: billingAddress.city,
+      billing_pincode: billingAddress.pincode,
+      billing_state: billingAddress.state,
+      billing_country: billingAddress.country || 'India',
+      billing_phone: billingAddress.phone,
+      shipping_is_billing: false,
+      shipping_customer_name: shippingAddress.name,
+      shipping_address: shippingAddress.addressLine1,
+      shipping_address_2: shippingAddress.addressLine2,
+      shipping_city: shippingAddress.city,
+      shipping_pincode: shippingAddress.pincode,
+      shipping_country: shippingAddress.country || 'India',
+      shipping_state: shippingAddress.state,
+      shipping_phone: shippingAddress.phone,
+      order_items: orderItems.map((i) => ({
+        name: i.name,
+        sku: i.sku,
+        units: i.quantity,
+        selling_price: i.price,
+        weight: i.weight / i.quantity,
+      })),
+      payment_method: 'Prepaid',
+      sub_total: subtotal,
+      length: products[0]?.length ?? 10,
+      breadth: products[0]?.breadth ?? 10,
+      height: products[0]?.height ?? 5,
+      weight: orderItems.reduce((sum, i) => sum + i.weight, 0),
+    })
+      .then((sr) => {
+        return OrderService.updateShiprocketDetails((order._id as any).toString(), {
+          shiprocketOrderId: String(sr.order_id),
+          shiprocketShipmentId: String(sr.shipment_id),
+        });
+      })
+      .catch((err) => {
+        console.error('Shiprocket order creation failed (non-fatal):', err.message);
+      });
+
+    res.status(201).json({
+      success: true,
+      message: 'Order placed successfully',
+      data: order,
+    });
+  } catch (error: any) {
+    await session.abortTransaction();
+    console.error('Create order error:', error);
+
+    if (error.message === 'Insufficient wallet balance') {
+      res.status(400).json({
+        success: false,
+        message: 'Insufficient wallet balance',
+        insufficientBalance: true,
+      });
+      return;
+    }
+
+    if (error.message === 'User not found') {
+      res.status(404).json({ success: false, message: 'User not found' });
+      return;
+    }
+
+    res.status(500).json({ success: false, message: error.message || 'Failed to place order' });
+  } finally {
+    session.endSession();
+  }
+};
+
+export const getUserOrders = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = await resolveUserId(req.user!.uid);
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 10;
+
+    const result = await OrderService.getUserOrders(userId, page, limit);
+
+    res.status(200).json({
+      success: true,
+      message: 'Orders fetched successfully',
+      data: result.orders,
+      pagination: {
+        page: result.page,
+        limit,
+        total: result.total,
+        totalPages: result.totalPages,
+      },
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message || 'Failed to fetch orders' });
+  }
+};
+
+export const getOrderById = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = await resolveUserId(req.user!.uid);
+    const order = await OrderService.getOrderById(req.params.id, userId);
+
+    if (!order) {
+      res.status(404).json({ success: false, message: 'Order not found' });
+      return;
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Order fetched successfully',
+      data: order,
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message || 'Failed to fetch order' });
+  }
+};
+
+export const getAllOrdersAdmin = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 20;
+    const status = req.query.status as string | undefined;
+
+    const result = await OrderService.getAllOrders(page, limit, status);
+
+    res.status(200).json({
+      success: true,
+      message: 'Orders fetched successfully',
+      data: result.orders,
+      pagination: {
+        page: result.page,
+        limit,
+        total: result.total,
+        totalPages: result.totalPages,
+      },
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message || 'Failed to fetch orders' });
+  }
+};
+
+// Shiprocket webhook status mapping
+const SHIPROCKET_STATUS_MAP: Record<string, string> = {
+  'Pickup Pending': 'processing',
+  'Pickup Scheduled': 'processing',
+  'Pickup Generated': 'processing',
+  'In Transit': 'shipped',
+  'Shipped': 'shipped',
+  'Out For Delivery': 'out_for_delivery',
+  'Delivered': 'delivered',
+  'Cancelled': 'cancelled',
+  'RTO': 'returned',
+  'RTO Delivered': 'returned',
+  'Return': 'returned',
+};
+
+export const shiprocketWebhook = async (req: Request, res: Response): Promise<void> => {
+  // Always acknowledge immediately to prevent Shiprocket retries
+  res.status(200).json({ success: true });
+
+  try {
+    const payload = req.body;
+    const awb: string | undefined = payload?.awb || payload?.shipment_track?.[0]?.awb_code;
+    const currentStatus: string | undefined = payload?.current_status || payload?.shipment_track?.[0]?.current_status;
+
+    if (!awb || !currentStatus) {
+      console.log('Shiprocket webhook: missing awb or current_status', payload);
+      return;
+    }
+
+    const mappedStatus = SHIPROCKET_STATUS_MAP[currentStatus];
+    if (!mappedStatus) {
+      console.log(`Shiprocket webhook: unknown status "${currentStatus}", skipping`);
+      return;
+    }
+
+    const estimatedDate = payload?.etd ? new Date(payload.etd) : undefined;
+    const courierName = payload?.courier_name || payload?.shipment_track?.[0]?.courier_name;
+
+    await OrderService.updateOrderStatus(awb, {
+      status: mappedStatus as any,
+      courierName,
+      estimatedDeliveryDate: estimatedDate,
+    });
+
+    console.log(`Shiprocket webhook: updated order with AWB ${awb} to status ${mappedStatus}`);
+  } catch (error: any) {
+    console.error('Shiprocket webhook processing error (non-fatal):', error.message);
+  }
+};

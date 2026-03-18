@@ -120,18 +120,23 @@ export class WalletService {
 
   /**
    * Deduct from wallet (with validation to prevent negative balance)
+   * If an external session is provided, it will be used (caller manages commit/abort).
+   * If no session is provided, an internal session is created and managed here.
    */
   static async deductFromWallet(
     ownerId: string,
     ownerType: 'user' | 'retailer',
-    data: DeductWalletData
+    data: DeductWalletData,
+    externalSession?: mongoose.ClientSession
   ): Promise<{ wallet: IWallet; transaction: IWalletTransaction }> {
-    const session = await mongoose.startSession();
-    session.startTransaction();
+    const ownSession = !externalSession;
+    const session = externalSession ?? await mongoose.startSession();
+
+    if (ownSession) session.startTransaction();
 
     try {
       const wallet = await this.getWalletByOwner(ownerId, ownerType);
-      
+
       if (!wallet) {
         throw new Error('Wallet not found');
       }
@@ -161,17 +166,17 @@ export class WalletService {
         metadata: data.metadata || {}
       }], { session });
 
-      await session.commitTransaction();
-      
+      if (ownSession) await session.commitTransaction();
+
       return {
         wallet,
         transaction: transaction[0]
       };
     } catch (error) {
-      await session.abortTransaction();
+      if (ownSession) await session.abortTransaction();
       throw error;
     } finally {
-      session.endSession();
+      if (ownSession) session.endSession();
     }
   }
 
@@ -210,13 +215,15 @@ export class WalletService {
 
   /**
    * Record a purchase transaction
+   * If an external session is provided, it will be used (caller manages commit/abort).
    */
   static async recordPurchase(
     ownerId: string,
     ownerType: 'user' | 'retailer',
     amount: number,
     description: string,
-    metadata?: Record<string, any>
+    metadata?: Record<string, any>,
+    externalSession?: mongoose.ClientSession
   ): Promise<{ wallet: IWallet; transaction: IWalletTransaction }> {
     return this.deductFromWallet(ownerId, ownerType, {
       amount,
@@ -224,7 +231,7 @@ export class WalletService {
       performedByType: ownerType,
       performedBy: ownerId,
       metadata: { ...metadata, transactionType: 'purchase' }
-    });
+    }, externalSession);
   }
 
   /**
