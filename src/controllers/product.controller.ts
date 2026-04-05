@@ -1,13 +1,38 @@
 import { Request, Response } from 'express';
 import { ProductService } from '../services/product.service';
 
+const parseBooleanQuery = (value: unknown): boolean | undefined => {
+  if (typeof value !== 'string') return undefined;
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  return undefined;
+};
+
 /**
  * Create a new product
  * POST /api/v1/products
  */
 export const createProduct = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { name, description, price, sku, images, category, tags, stock, isActive, customFields, normalUserPricing, retailerPricing, weight, length, breadth, height } = req.body;
+    const {
+      name,
+      description,
+      price,
+      sku,
+      images,
+      category,
+      tags,
+      stock,
+      isActive,
+      isFeatured,
+      customFields,
+      normalUserPricing,
+      retailerPricing,
+      weight,
+      length,
+      breadth,
+      height,
+    } = req.body;
 
     const product = await ProductService.createProduct({
       name,
@@ -19,6 +44,7 @@ export const createProduct = async (req: Request, res: Response): Promise<void> 
       tags: tags || [],
       stock: stock !== undefined ? stock : 0,
       isActive: isActive !== undefined ? isActive : true,
+      isFeatured: isFeatured !== undefined ? isFeatured : false,
       customFields: customFields || null,
       normalUserPricing: normalUserPricing || [],
       retailerPricing: retailerPricing || { minimumOrderQuantity: 1, slabs: [] },
@@ -81,8 +107,10 @@ export const getAllProducts = async (req: Request, res: Response): Promise<void>
     const search = req.query.search as string;
     const category = req.query.category as string;
     const tags = req.query.tags ? (req.query.tags as string).split(',') : undefined;
+    const featured = parseBooleanQuery(req.query.featured);
+    const active = parseBooleanQuery(req.query.active);
 
-    const result = await ProductService.getAllProducts(page, limit, search, category, tags);
+    const result = await ProductService.getAllProducts(page, limit, search, category, tags, featured, active);
 
     res.status(200).json({
       success: true,
@@ -143,7 +171,25 @@ export const getProductById = async (req: Request, res: Response): Promise<void>
 export const updateProduct = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const { name, description, price, sku, images, category, tags, stock, isActive, customFields, normalUserPricing, retailerPricing, weight, length, breadth, height } = req.body;
+    const {
+      name,
+      description,
+      price,
+      sku,
+      images,
+      category,
+      tags,
+      stock,
+      isActive,
+      isFeatured,
+      customFields,
+      normalUserPricing,
+      retailerPricing,
+      weight,
+      length,
+      breadth,
+      height,
+    } = req.body;
 
     const updateData: any = {};
     if (name) updateData.name = name;
@@ -155,6 +201,7 @@ export const updateProduct = async (req: Request, res: Response): Promise<void> 
     if (tags !== undefined) updateData.tags = tags;
     if (stock !== undefined) updateData.stock = stock;
     if (isActive !== undefined) updateData.isActive = isActive;
+    if (isFeatured !== undefined) updateData.isFeatured = isFeatured;
     if (customFields !== undefined) updateData.customFields = customFields;
     if (normalUserPricing !== undefined) updateData.normalUserPricing = normalUserPricing;
     if (retailerPricing !== undefined) updateData.retailerPricing = retailerPricing;
@@ -246,5 +293,4 @@ export const deleteProduct = async (req: Request, res: Response): Promise<void> 
     });
   }
 };
-
 

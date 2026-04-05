@@ -5,7 +5,7 @@ import { Request, Response, NextFunction } from 'express';
  */
 export const validateProductData = (isUpdate: boolean = false) => {
   return (req: Request, res: Response, next: NextFunction): void => {
-    const { name, description, price, sku, category, tags, stock, images, normalUserPricing, retailerPricing } = req.body;
+    const { name, description, price, sku, category, tags, stock, images, isActive, isFeatured, normalUserPricing, retailerPricing } = req.body;
     const errors: string[] = [];
 
     // Validate name
@@ -75,6 +75,14 @@ export const validateProductData = (isUpdate: boolean = false) => {
       if (!Array.isArray(images)) {
         errors.push('Images must be an array');
       }
+    }
+
+    if (isActive !== undefined && typeof isActive !== 'boolean') {
+      errors.push('isActive must be a boolean');
+    }
+
+    if (isFeatured !== undefined && typeof isFeatured !== 'boolean') {
+      errors.push('isFeatured must be a boolean');
     }
 
     // Validate normalUserPricing (optional array of slabs)
@@ -150,5 +158,4 @@ export const validateObjectId = (req: Request, res: Response, next: NextFunction
 
   next();
 };
-
 

@@ -20,6 +20,7 @@ export interface IProduct extends Document {
   tags: mongoose.Types.ObjectId[];
   stock: number;
   isActive: boolean;
+  isFeatured: boolean;
   customFields?: any;
   normalUserPricing: IPricingSlab[];
   retailerPricing: IRetailerPricing;
@@ -81,6 +82,10 @@ const productSchema = new Schema<IProduct>(
     isActive: {
       type: Boolean,
       default: true,
+    },
+    isFeatured: {
+      type: Boolean,
+      default: false,
     },
     customFields: {
       type: Schema.Types.Mixed,
@@ -144,10 +149,10 @@ productSchema.index({ name: 1 });
 productSchema.index({ category: 1 });
 productSchema.index({ tags: 1 });
 productSchema.index({ isActive: 1 });
+productSchema.index({ isFeatured: 1 });
 productSchema.index({ sku: 1 });
 
 const Product = mongoose.model<IProduct>('Product', productSchema);
 
 export default Product;
-
 

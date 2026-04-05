@@ -4,6 +4,8 @@ import Category from '../models/category.model';
 interface ProductQuery {
   category?: string;
   tags?: { $in: string[] };
+  isActive?: boolean;
+  isFeatured?: boolean;
   $or?: any[];
 }
 
@@ -40,7 +42,9 @@ export class ProductService {
     limit: number = 10,
     search?: string,
     categoryId?: string,
-    tagIds?: string[]
+    tagIds?: string[],
+    featured?: boolean,
+    isActive?: boolean
   ): Promise<{ products: IProduct[]; total: number; page: number; totalPages: number }> {
     const skip = (page - 1) * limit;
     
@@ -53,6 +57,14 @@ export class ProductService {
     
     if (tagIds && tagIds.length > 0) {
       query.tags = { $in: tagIds };
+    }
+
+    if (typeof featured === 'boolean') {
+      query.isFeatured = featured;
+    }
+
+    if (typeof isActive === 'boolean') {
+      query.isActive = isActive;
     }
     
     if (search) {
@@ -115,5 +127,4 @@ export class ProductService {
     return !!result;
   }
 }
-
 
