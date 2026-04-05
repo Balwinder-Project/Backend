@@ -136,7 +136,7 @@ router.put('/profile', authenticateUser, async (req: Request, res: Response) => 
 
 /**
  * @route   POST /api/auth/set-admin/:uid
- * @desc    Set admin role for a user
+ * @desc    Grant or revoke admin role for a user
  * @access  Admin only
  */
 router.post(
@@ -146,13 +146,13 @@ router.post(
   async (req: Request, res: Response) => {
     try {
       const { uid } = req.params;
-      const { admin } = req.body;
+      const { grant } = req.body;
 
-      await setCustomClaims(uid, { admin: admin === true });
+      await setCustomClaims(uid, grant !== false ? { role: 'admin' } : {});
 
       res.json({
         success: true,
-        message: `Admin role ${admin ? 'granted' : 'revoked'} for user ${uid}`,
+        message: `Admin role ${grant !== false ? 'granted' : 'revoked'} for user ${uid}`,
       });
     } catch (error) {
       console.error('Error setting admin role:', error);
@@ -163,6 +163,36 @@ router.post(
     }
   }
 );
+
+/**
+ * @route   POST /api/auth/bootstrap-admin
+ * @desc    One-time bootstrap: grant admin to a UID using a server secret.
+ *          Set ADMIN_BOOTSTRAP_SECRET in .env. Keep this secret — do not expose publicly.
+ * @access  Public (secret-gated)
+ */
+router.post('/bootstrap-admin', async (req: Request, res: Response) => {
+  try {
+    const secret = process.env.ADMIN_BOOTSTRAP_SECRET;
+    if (!secret) {
+      res.status(503).json({ success: false, message: 'Bootstrap not configured' });
+      return;
+    }
+
+    const { uid, bootstrapSecret } = req.body;
+
+    if (!uid || bootstrapSecret !== secret) {
+      res.status(403).json({ success: false, message: 'Invalid bootstrap secret' });
+      return;
+    }
+
+    await setCustomClaims(uid, { role: 'admin' });
+
+    res.json({ success: true, message: `Admin role granted to ${uid}` });
+  } catch (error) {
+    console.error('Bootstrap admin error:', error);
+    res.status(500).json({ success: false, message: 'Failed to bootstrap admin' });
+  }
+});
 
 /**
  * @route   GET /api/auth/verify

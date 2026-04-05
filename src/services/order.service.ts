@@ -72,10 +72,25 @@ export class OrderService {
     return { orders, total, page, totalPages: Math.ceil(total / limit) };
   }
 
-  static async getOrderById(orderId: string, userId?: string): Promise<IOrder | null> {
+  static async getOrderById(
+    orderId: string,
+    userId?: string,
+    populateUser: boolean = false
+  ): Promise<IOrder | null> {
+    if (!mongoose.Types.ObjectId.isValid(orderId)) {
+      return null;
+    }
+
     const query: any = { _id: orderId };
     if (userId) query.userId = new mongoose.Types.ObjectId(userId);
-    return Order.findOne(query);
+
+    let orderQuery = Order.findOne(query);
+
+    if (populateUser) {
+      orderQuery = orderQuery.populate('userId', 'name email');
+    }
+
+    return orderQuery;
   }
 
   static async getAllOrders(
@@ -109,5 +124,17 @@ export class OrderService {
     }
   ): Promise<IOrder | null> {
     return Order.findOneAndUpdate({ awbCode }, statusData, { new: true });
+  }
+
+  static async updateOrderStatusById(
+    orderId: string,
+    status: OrderStatus
+  ): Promise<IOrder | null> {
+    if (!mongoose.Types.ObjectId.isValid(orderId)) {
+      return null;
+    }
+
+    return Order.findByIdAndUpdate(orderId, { status }, { new: true })
+      .populate('userId', 'name email');
   }
 }

@@ -67,7 +67,7 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
       shippingCharge,
       notes,
     } = req.body as {
-      items: Array<{ productId: string; quantity: number; price: number; variant?: string }>;
+      items: Array<{ productId: string; quantity: number; price: number; variant?: Record<string, any> }>;
       shippingAddress: IEmbeddedAddress;
       billingAddress: IEmbeddedAddress;
       shippingCharge: number;
@@ -240,6 +240,30 @@ export const getOrderById = async (req: Request, res: Response): Promise<void> =
       data: order,
     });
   } catch (error: any) {
+    if (error.message === 'User not found') {
+      res.status(404).json({ success: false, message: 'User not found' });
+      return;
+    }
+
+    res.status(500).json({ success: false, message: error.message || 'Failed to fetch order' });
+  }
+};
+
+export const getAdminOrderById = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const order = await OrderService.getOrderById(req.params.id, undefined, true);
+
+    if (!order) {
+      res.status(404).json({ success: false, message: 'Order not found' });
+      return;
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Order fetched successfully',
+      data: order,
+    });
+  } catch (error: any) {
     res.status(500).json({ success: false, message: error.message || 'Failed to fetch order' });
   }
 };
@@ -265,6 +289,26 @@ export const getAllOrdersAdmin = async (req: Request, res: Response): Promise<vo
     });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message || 'Failed to fetch orders' });
+  }
+};
+
+export const updateAdminOrderStatus = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { status } = req.body as { status: Parameters<typeof OrderService.updateOrderStatusById>[1] };
+    const order = await OrderService.updateOrderStatusById(req.params.id, status);
+
+    if (!order) {
+      res.status(404).json({ success: false, message: 'Order not found' });
+      return;
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Order status updated successfully',
+      data: order,
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message || 'Failed to update order status' });
   }
 };
 

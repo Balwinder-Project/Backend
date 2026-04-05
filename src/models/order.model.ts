@@ -17,7 +17,7 @@ export interface IOrderItem {
   sku: string;
   quantity: number;
   price: number;
-  variant?: string;
+  variant?: Record<string, any>;
   weight: number;
 }
 
@@ -76,7 +76,7 @@ const orderItemSchema = new Schema<IOrderItem>(
     sku: { type: String, required: true },
     quantity: { type: Number, required: true, min: 1 },
     price: { type: Number, required: true, min: 0 },
-    variant: { type: String },
+    variant: { type: Schema.Types.Mixed },
     weight: { type: Number, required: true, default: 0.5 },
   },
   { _id: false }

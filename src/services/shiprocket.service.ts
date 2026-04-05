@@ -133,12 +133,13 @@ export class ShiprocketService {
     weight: number,
     cod: 0 | 1 = 0
   ): Promise<ShippingRate[]> {
-    const data = await this.request<any>('POST', '/courier/serviceability/', {
+    const params = new URLSearchParams({
       pickup_postcode: pickupPostcode,
       delivery_postcode: deliveryPostcode,
-      weight,
-      cod,
+      weight: String(weight),
+      cod: String(cod),
     });
+    const data = await this.request<any>('GET', `/courier/serviceability/?${params}`);
 
     const couriers: any[] = data?.data?.available_courier_companies ?? [];
 

@@ -1,4 +1,5 @@
 import { body } from 'express-validator';
+import { OrderStatus } from '../models/order.model';
 
 export const shippingRatesValidator = [
   body('deliveryPincode')
@@ -48,4 +49,10 @@ export const createOrderValidator = [
   body('shippingCharge')
     .notEmpty().withMessage('Shipping charge is required')
     .isFloat({ min: 0 }).withMessage('Shipping charge must be non-negative'),
+];
+
+export const updateOrderStatusValidator = [
+  body('status')
+    .notEmpty().withMessage('Status is required')
+    .isIn(Object.values(OrderStatus)).withMessage('Invalid order status'),
 ];
