@@ -1,5 +1,6 @@
 import { Router } from 'express';
-import { createAdminUser } from '../controllers/admin.controller';
+import { createAdminUser, getDashboardSummary } from '../controllers/admin.controller';
+import { authenticateUser, requireAdmin } from '../middleware/auth.middleware';
 
 const router = Router();
 
@@ -9,6 +10,6 @@ const router = Router();
  * Note: In production, this should be protected with admin authentication
  */
 router.post('/create-admin-user', createAdminUser);
+router.get('/dashboard', authenticateUser, requireAdmin, getDashboardSummary);
 
 export default router;
-

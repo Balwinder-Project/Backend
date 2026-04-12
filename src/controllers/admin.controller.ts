@@ -1,11 +1,14 @@
 import { Request, Response } from 'express';
 import { auth } from '../config/firebase';
+import { AdminService, type DashboardRange } from '../services/admin.service';
 
 interface CreateAdminUserRequest {
   email: string;
   password: string;
   displayName?: string;
 }
+
+const DASHBOARD_RANGES: DashboardRange[] = ['7d', '30d', '90d'];
 
 /**
  * Create a new admin user in Firebase Auth with custom claims
@@ -94,3 +97,24 @@ export const createAdminUser = async (req: Request, res: Response): Promise<void
   }
 };
 
+export const getDashboardSummary = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const requestedRange = req.query.range as DashboardRange | undefined;
+    const range = requestedRange && DASHBOARD_RANGES.includes(requestedRange) ? requestedRange : '30d';
+
+    const summary = await AdminService.getDashboardSummary(range);
+
+    res.status(200).json({
+      success: true,
+      message: 'Dashboard summary fetched successfully',
+      data: summary,
+    });
+  } catch (error: any) {
+    console.error('Error fetching dashboard summary:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch dashboard summary',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+    });
+  }
+};
