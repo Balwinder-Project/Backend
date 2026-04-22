@@ -42,6 +42,10 @@ export class CatalogueQcService {
     return CatalogueChangeRequest.find({ status }).sort({ createdAt: 1 });
   }
 
+  static async listBySubmitter(uid: string) {
+    return CatalogueChangeRequest.find({ submittedBy: uid }).sort({ createdAt: -1 });
+  }
+
   static async getRequest(id: string) {
     return CatalogueChangeRequest.findById(id);
   }

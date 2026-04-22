@@ -72,6 +72,18 @@ export const listQcCheck2 = async (_req: Request, res: Response): Promise<void> 
   }
 };
 
+export const listMyQcSubmissions = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const requests = await CatalogueQcService.listBySubmitter(req.user?.uid || '');
+    res.status(200).json({
+      success: true,
+      data: requests,
+    });
+  } catch (error: any) {
+    sendQcError(res, error);
+  }
+};
+
 export const getQcRequest = async (req: Request, res: Response): Promise<void> => {
   try {
     const request = await CatalogueQcService.getRequest(req.params.id);

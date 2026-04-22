@@ -3,6 +3,7 @@ import {
   approveQcCheck1,
   approveQcCheck2,
   getQcRequest,
+  listMyQcSubmissions,
   listQcCheck1,
   listQcCheck2,
   rejectQcCheck1,
@@ -16,6 +17,7 @@ router.use(authenticateUser, requireAdmin);
 
 router.get('/check-1', requireAdminPermission('QC_CHECK_1'), listQcCheck1);
 router.get('/check-2', requireAdminPermission('QC_CHECK_2'), listQcCheck2);
+router.get('/my-submissions', requireAdminPermission('PRODUCT_EDITOR'), listMyQcSubmissions);
 router.get('/requests/:id', getQcRequest);
 router.post('/check-1/:id/approve', requireAdminPermission('QC_CHECK_1'), approveQcCheck1);
 router.post('/check-1/:id/reject', requireAdminPermission('QC_CHECK_1'), rejectQcCheck1);
