@@ -10,6 +10,7 @@ import walletRoutes from './wallet.routes';
 import uploadRoutes from './upload.routes';
 import addressRoutes from './address.routes';
 import orderRoutes from './order.routes';
+import qcRoutes from './qc.routes';
 
 const router = Router();
 
@@ -28,6 +29,7 @@ router.use(`${API_VERSION}/wallets`, walletRoutes);
 router.use(`${API_VERSION}/upload`, uploadRoutes);
 router.use(`${API_VERSION}/addresses`, addressRoutes);
 router.use(`${API_VERSION}/orders`, orderRoutes);
+router.use(`${API_VERSION}/qc`, qcRoutes);
 
 // API info endpoint
 router.get('/', (_req, res) => {
@@ -46,10 +48,10 @@ router.get('/', (_req, res) => {
       wallets: `${API_VERSION}/wallets`,
       upload: `${API_VERSION}/upload`,
       addresses: `${API_VERSION}/addresses`,
-      orders: `${API_VERSION}/orders`
+      orders: `${API_VERSION}/orders`,
+      qc: `${API_VERSION}/qc`
     }
   });
 });
 
 export default router;
-

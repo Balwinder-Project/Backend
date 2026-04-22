@@ -1,11 +1,56 @@
 import { Request, Response } from 'express';
 import { ProductService } from '../services/product.service';
+import { CatalogueQcService } from '../services/catalogueQc.service';
+import { hasAdminPermission } from '../constants/adminRoles';
 
 const parseBooleanQuery = (value: unknown): boolean | undefined => {
   if (typeof value !== 'string') return undefined;
   if (value === 'true') return true;
   if (value === 'false') return false;
   return undefined;
+};
+
+const getActor = (req: Request) => ({
+  uid: req.user?.uid || 'unknown',
+  email: req.user?.email,
+});
+
+const sendMutationError = (res: Response, error: any, fallbackMessage: string): void => {
+  if (
+    error.message === 'Category not found' ||
+    error.message === 'One or more tags were not found' ||
+    error.message === 'product not found'
+  ) {
+    res.status(400).json({
+      success: false,
+      message: error.message
+    });
+    return;
+  }
+
+  if (error.message === 'A product with this SKU already exists' || error.code === 11000) {
+    res.status(409).json({
+      success: false,
+      message: 'A product with this SKU already exists'
+    });
+    return;
+  }
+
+  if (error.name === 'ValidationError') {
+    const messages = Object.values(error.errors).map((err: any) => err.message);
+    res.status(400).json({
+      success: false,
+      message: 'Validation failed',
+      errors: messages
+    });
+    return;
+  }
+
+  res.status(500).json({
+    success: false,
+    message: fallbackMessage,
+    error: process.env.NODE_ENV === 'development' ? error.message : undefined
+  });
 };
 
 /**
@@ -34,7 +79,7 @@ export const createProduct = async (req: Request, res: Response): Promise<void> 
       height,
     } = req.body;
 
-    const product = await ProductService.createProduct({
+    const productData = {
       name,
       description,
       price,
@@ -52,7 +97,19 @@ export const createProduct = async (req: Request, res: Response): Promise<void> 
       length: length !== undefined ? length : 10,
       breadth: breadth !== undefined ? breadth : 10,
       height: height !== undefined ? height : 5,
-    } as any);
+    } as any;
+
+    if (!hasAdminPermission(req.user, 'OWNER')) {
+      const request = await CatalogueQcService.createRequest('product', 'create', productData, getActor(req));
+      res.status(202).json({
+        success: true,
+        message: 'Product submitted for QC approval',
+        data: request
+      });
+      return;
+    }
+
+    const product = await ProductService.createProduct(productData);
 
     res.status(201).json({
       success: true,
@@ -62,37 +119,7 @@ export const createProduct = async (req: Request, res: Response): Promise<void> 
   } catch (error: any) {
     console.error('Error creating product:', error);
 
-    if (error.message === 'Category not found') {
-      res.status(400).json({
-        success: false,
-        message: 'Category not found. Please create categories first.'
-      });
-      return;
-    }
-
-    if (error.code === 11000) {
-      res.status(409).json({
-        success: false,
-        message: 'A product with this SKU already exists'
-      });
-      return;
-    }
-
-    if (error.name === 'ValidationError') {
-      const messages = Object.values(error.errors).map((err: any) => err.message);
-      res.status(400).json({
-        success: false,
-        message: 'Validation failed',
-        errors: messages
-      });
-      return;
-    }
-
-    res.status(500).json({
-      success: false,
-      message: 'Failed to create product',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
+    sendMutationError(res, error, 'Failed to create product');
   }
 };
 
@@ -210,6 +237,16 @@ export const updateProduct = async (req: Request, res: Response): Promise<void> 
     if (breadth !== undefined) updateData.breadth = breadth;
     if (height !== undefined) updateData.height = height;
 
+    if (!hasAdminPermission(req.user, 'OWNER')) {
+      const request = await CatalogueQcService.createRequest('product', 'update', updateData, getActor(req), id);
+      res.status(202).json({
+        success: true,
+        message: 'Product changes submitted for QC approval',
+        data: request
+      });
+      return;
+    }
+
     const product = await ProductService.updateProduct(id, updateData);
 
     if (!product) {
@@ -228,37 +265,7 @@ export const updateProduct = async (req: Request, res: Response): Promise<void> 
   } catch (error: any) {
     console.error('Error updating product:', error);
 
-    if (error.message === 'Category not found') {
-      res.status(400).json({
-        success: false,
-        message: 'Category not found'
-      });
-      return;
-    }
-
-    if (error.code === 11000) {
-      res.status(409).json({
-        success: false,
-        message: 'A product with this SKU already exists'
-      });
-      return;
-    }
-
-    if (error.name === 'ValidationError') {
-      const messages = Object.values(error.errors).map((err: any) => err.message);
-      res.status(400).json({
-        success: false,
-        message: 'Validation failed',
-        errors: messages
-      });
-      return;
-    }
-
-    res.status(500).json({
-      success: false,
-      message: 'Failed to update product',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
+    sendMutationError(res, error, 'Failed to update product');
   }
 };
 
@@ -269,6 +276,16 @@ export const updateProduct = async (req: Request, res: Response): Promise<void> 
 export const deleteProduct = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
+
+    if (!hasAdminPermission(req.user, 'OWNER')) {
+      const request = await CatalogueQcService.createRequest('product', 'delete', null, getActor(req), id);
+      res.status(202).json({
+        success: true,
+        message: 'Product deletion submitted for QC approval',
+        data: request
+      });
+      return;
+    }
 
     const deleted = await ProductService.deleteProduct(id);
 
@@ -286,11 +303,6 @@ export const deleteProduct = async (req: Request, res: Response): Promise<void> 
     });
   } catch (error: any) {
     console.error('Error deleting product:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to delete product',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
+    sendMutationError(res, error, 'Failed to delete product');
   }
 };
-

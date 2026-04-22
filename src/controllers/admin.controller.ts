@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { auth } from '../config/firebase';
 import { AdminService, type DashboardRange } from '../services/admin.service';
+import { ADMIN_PERMISSIONS, normalizeAdminRoles } from '../constants/adminRoles';
 
 interface CreateAdminUserRequest {
   email: string;
@@ -9,6 +10,19 @@ interface CreateAdminUserRequest {
 }
 
 const DASHBOARD_RANGES: DashboardRange[] = ['7d', '30d', '90d'];
+
+const listAllFirebaseUsers = async () => {
+  const users = [];
+  let nextPageToken: string | undefined;
+
+  do {
+    const result = await auth.listUsers(1000, nextPageToken);
+    users.push(...result.users);
+    nextPageToken = result.pageToken;
+  } while (nextPageToken);
+
+  return users;
+};
 
 /**
  * Create a new admin user in Firebase Auth with custom claims
@@ -56,7 +70,8 @@ export const createAdminUser = async (req: Request, res: Response): Promise<void
 
     // Set custom claims for admin role
     await auth.setCustomUserClaims(userRecord.uid, {
-      role: 'admin'
+      role: 'admin',
+      adminRoles: []
     });
 
     res.status(201).json({
@@ -66,7 +81,8 @@ export const createAdminUser = async (req: Request, res: Response): Promise<void
         uid: userRecord.uid,
         email: userRecord.email,
         displayName: userRecord.displayName,
-        role: 'admin'
+        role: 'admin',
+        adminRoles: []
       }
     });
   } catch (error: any) {
@@ -93,6 +109,141 @@ export const createAdminUser = async (req: Request, res: Response): Promise<void
       success: false,
       message: 'Failed to create admin user',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+export const listAdminPermissions = async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const users = await listAllFirebaseUsers();
+    const admins = users
+      .filter((user) => user.customClaims?.role === 'admin')
+      .map((user) => ({
+        uid: user.uid,
+        email: user.email,
+        displayName: user.displayName,
+        disabled: user.disabled,
+        adminRoles: normalizeAdminRoles(user.customClaims?.adminRoles),
+        createdAt: user.metadata.creationTime,
+        lastSignInAt: user.metadata.lastSignInTime,
+      }));
+
+    res.status(200).json({
+      success: true,
+      data: admins,
+    });
+  } catch (error: any) {
+    console.error('Error listing admin permissions:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to list admin permissions',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+    });
+  }
+};
+
+export const updateAdminPermissions = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { uid } = req.params;
+    const { adminRoles } = req.body;
+
+    if (!Array.isArray(adminRoles)) {
+      res.status(400).json({
+        success: false,
+        message: 'adminRoles must be an array',
+      });
+      return;
+    }
+
+    const normalizedRoles = normalizeAdminRoles(adminRoles);
+    if (normalizedRoles.length !== new Set(adminRoles).size) {
+      res.status(400).json({
+        success: false,
+        message: `Invalid admin role. Allowed roles: ${ADMIN_PERMISSIONS.join(', ')}`,
+      });
+      return;
+    }
+
+    const userRecord = await auth.getUser(uid);
+    const existingClaims = userRecord.customClaims || {};
+
+    await auth.setCustomUserClaims(uid, {
+      ...existingClaims,
+      role: 'admin',
+      adminRoles: normalizedRoles,
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Admin permissions updated successfully',
+      data: {
+        uid,
+        email: userRecord.email,
+        displayName: userRecord.displayName,
+        role: 'admin',
+        adminRoles: normalizedRoles,
+      },
+    });
+  } catch (error: any) {
+    console.error('Error updating admin permissions:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update admin permissions',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+    });
+  }
+};
+
+export const deleteAdminUser = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { uid } = req.params;
+
+    if (!uid) {
+      res.status(400).json({
+        success: false,
+        message: 'Admin UID is required',
+      });
+      return;
+    }
+
+    if (req.user?.uid === uid) {
+      res.status(400).json({
+        success: false,
+        message: 'You cannot remove your own admin account',
+      });
+      return;
+    }
+
+    const userRecord = await auth.getUser(uid);
+    if (userRecord.customClaims?.role !== 'admin') {
+      res.status(400).json({
+        success: false,
+        message: 'Only admin accounts can be removed here',
+      });
+      return;
+    }
+
+    await auth.deleteUser(uid);
+
+    res.status(200).json({
+      success: true,
+      message: 'Admin account removed successfully',
+    });
+  } catch (error: any) {
+    console.error('Error deleting admin user:', error);
+
+    if (error.code === 'auth/user-not-found') {
+      res.status(404).json({
+        success: false,
+        message: 'Admin account not found',
+      });
+      return;
+    }
+
+    res.status(500).json({
+      success: false,
+      message: 'Failed to remove admin account',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };

@@ -6,7 +6,7 @@ import {
   updateTag,
   deleteTag
 } from '../controllers/tag.controller';
-import { authenticateUser, requireAdmin } from '../middleware/auth.middleware';
+import { authenticateUser, requireAnyAdminPermission } from '../middleware/auth.middleware';
 import { validateTagData, validateObjectId } from '../validators/tag.validator';
 
 const router = Router();
@@ -30,22 +30,21 @@ router.get('/:id', validateObjectId, getTagById);
  * Create a new tag
  * Requires admin authentication
  */
-router.post('/', authenticateUser, requireAdmin, validateTagData(false), createTag);
+router.post('/', authenticateUser, requireAnyAdminPermission(['PRODUCT_EDITOR', 'OWNER']), validateTagData(false), createTag);
 
 /**
  * PUT /api/v1/tags/:id
  * Update a tag
  * Requires admin authentication
  */
-router.put('/:id', authenticateUser, requireAdmin, validateObjectId, validateTagData(true), updateTag);
+router.put('/:id', authenticateUser, requireAnyAdminPermission(['PRODUCT_EDITOR', 'OWNER']), validateObjectId, validateTagData(true), updateTag);
 
 /**
  * DELETE /api/v1/tags/:id
  * Delete a tag
  * Requires admin authentication
  */
-router.delete('/:id', authenticateUser, requireAdmin, validateObjectId, deleteTag);
+router.delete('/:id', authenticateUser, requireAnyAdminPermission(['PRODUCT_EDITOR', 'OWNER']), validateObjectId, deleteTag);
 
 export default router;
-
 

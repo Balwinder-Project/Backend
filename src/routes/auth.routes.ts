@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { authenticateUser, requireAdmin } from '../middleware/auth.middleware';
 import {
   getUserByUid,
+  getUserByEmail,
   setCustomClaims,
   getDocument,
   setDocument,
@@ -148,7 +149,7 @@ router.post(
       const { uid } = req.params;
       const { grant } = req.body;
 
-      await setCustomClaims(uid, grant !== false ? { role: 'admin' } : {});
+      await setCustomClaims(uid, grant !== false ? { role: 'admin', adminRoles: [] } : {});
 
       res.json({
         success: true,
@@ -178,19 +179,62 @@ router.post('/bootstrap-admin', async (req: Request, res: Response) => {
       return;
     }
 
-    const { uid, bootstrapSecret } = req.body;
+    const { uid, email, bootstrapSecret } = req.body;
 
-    if (!uid || bootstrapSecret !== secret) {
+    if ((!uid && !email) || bootstrapSecret !== secret) {
       res.status(403).json({ success: false, message: 'Invalid bootstrap secret' });
       return;
     }
 
-    await setCustomClaims(uid, { role: 'admin' });
+    const userRecord = email ? await getUserByEmail(email) : await getUserByUid(uid);
 
-    res.json({ success: true, message: `Admin role granted to ${uid}` });
+    await setCustomClaims(userRecord.uid, { role: 'admin', adminRoles: [] });
+
+    res.json({ success: true, message: `Admin role granted to ${userRecord.email || userRecord.uid}` });
   } catch (error) {
     console.error('Bootstrap admin error:', error);
     res.status(500).json({ success: false, message: 'Failed to bootstrap admin' });
+  }
+});
+
+/**
+ * @route   POST /api/auth/bootstrap-owner
+ * @desc    One-time bootstrap: grant OWNER admin role to a UID using a server secret.
+ *          Set ADMIN_BOOTSTRAP_SECRET in .env. Keep this secret — do not expose publicly.
+ * @access  Public (secret-gated)
+ */
+router.post('/bootstrap-owner', async (req: Request, res: Response) => {
+  try {
+    const secret = process.env.ADMIN_BOOTSTRAP_SECRET;
+    if (!secret) {
+      res.status(503).json({ success: false, message: 'Bootstrap not configured' });
+      return;
+    }
+
+    const { email, bootstrapSecret } = req.body;
+
+    if (!email || bootstrapSecret !== secret) {
+      res.status(403).json({ success: false, message: 'Invalid bootstrap secret' });
+      return;
+    }
+
+    const userRecord = await getUserByEmail(email);
+
+    await setCustomClaims(userRecord.uid, { role: 'admin', adminRoles: ['OWNER'] });
+
+    res.json({
+      success: true,
+      message: `OWNER role granted to ${userRecord.email || userRecord.uid}`,
+      data: {
+        uid: userRecord.uid,
+        email: userRecord.email,
+        role: 'admin',
+        adminRoles: ['OWNER'],
+      },
+    });
+  } catch (error) {
+    console.error('Bootstrap owner error:', error);
+    res.status(500).json({ success: false, message: 'Failed to bootstrap owner' });
   }
 });
 
@@ -208,4 +252,3 @@ router.get('/verify', authenticateUser, (req: Request, res: Response) => {
 });
 
 export default router;
-

@@ -6,7 +6,7 @@ import {
   updateProduct,
   deleteProduct
 } from '../controllers/product.controller';
-import { authenticateUser, requireAdmin } from '../middleware/auth.middleware';
+import { authenticateUser, requireAnyAdminPermission } from '../middleware/auth.middleware';
 import { validateProductData, validateObjectId } from '../validators/product.validator';
 
 const router = Router();
@@ -30,22 +30,21 @@ router.get('/:id', validateObjectId, getProductById);
  * Create a new product
  * Requires admin authentication
  */
-router.post('/', authenticateUser, requireAdmin, validateProductData(false), createProduct);
+router.post('/', authenticateUser, requireAnyAdminPermission(['PRODUCT_EDITOR', 'OWNER']), validateProductData(false), createProduct);
 
 /**
  * PUT /api/v1/products/:id
  * Update a product
  * Requires admin authentication
  */
-router.put('/:id', authenticateUser, requireAdmin, validateObjectId, validateProductData(true), updateProduct);
+router.put('/:id', authenticateUser, requireAnyAdminPermission(['PRODUCT_EDITOR', 'OWNER']), validateObjectId, validateProductData(true), updateProduct);
 
 /**
  * DELETE /api/v1/products/:id
  * Delete a product
  * Requires admin authentication
  */
-router.delete('/:id', authenticateUser, requireAdmin, validateObjectId, deleteProduct);
+router.delete('/:id', authenticateUser, requireAnyAdminPermission(['PRODUCT_EDITOR', 'OWNER']), validateObjectId, deleteProduct);
 
 export default router;
-
 

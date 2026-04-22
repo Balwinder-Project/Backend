@@ -1,5 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
 import { verifyIdToken } from '../utils/firebase.utils';
+import {
+  AdminPermission,
+  hasAdminPermission,
+  hasAnyAdminPermission,
+} from '../constants/adminRoles';
 
 // Extend Express Request type to include user
 declare global {
@@ -104,3 +109,62 @@ export const requireClaims = (requiredClaims: Record<string, any>) => {
  */
 export const requireAdmin = requireClaims({ role: 'admin' });
 
+export const requireAdminPermission = (permission: AdminPermission) => {
+  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      if (!req.user) {
+        res.status(401).json({
+          success: false,
+          message: 'Authentication required'
+        });
+        return;
+      }
+
+      if (!hasAdminPermission(req.user, permission)) {
+        res.status(403).json({
+          success: false,
+          message: 'Insufficient permissions'
+        });
+        return;
+      }
+
+      next();
+    } catch (error) {
+      console.error('Authorization error:', error);
+      res.status(403).json({
+        success: false,
+        message: 'Authorization failed'
+      });
+    }
+  };
+};
+
+export const requireAnyAdminPermission = (permissions: AdminPermission[]) => {
+  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      if (!req.user) {
+        res.status(401).json({
+          success: false,
+          message: 'Authentication required'
+        });
+        return;
+      }
+
+      if (!hasAnyAdminPermission(req.user, permissions)) {
+        res.status(403).json({
+          success: false,
+          message: 'Insufficient permissions'
+        });
+        return;
+      }
+
+      next();
+    } catch (error) {
+      console.error('Authorization error:', error);
+      res.status(403).json({
+        success: false,
+        message: 'Authorization failed'
+      });
+    }
+  };
+};

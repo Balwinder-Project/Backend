@@ -1,6 +1,12 @@
 import { Router } from 'express';
-import { createAdminUser, getDashboardSummary } from '../controllers/admin.controller';
-import { authenticateUser, requireAdmin } from '../middleware/auth.middleware';
+import {
+  createAdminUser,
+  deleteAdminUser,
+  getDashboardSummary,
+  listAdminPermissions,
+  updateAdminPermissions,
+} from '../controllers/admin.controller';
+import { authenticateUser, requireAdmin, requireAdminPermission } from '../middleware/auth.middleware';
 
 const router = Router();
 
@@ -11,5 +17,9 @@ const router = Router();
  */
 router.post('/create-admin-user', createAdminUser);
 router.get('/dashboard', authenticateUser, requireAdmin, getDashboardSummary);
+router.get('/permissions/admins', authenticateUser, requireAdminPermission('OWNER'), listAdminPermissions);
+router.post('/permissions/admins', authenticateUser, requireAdminPermission('OWNER'), createAdminUser);
+router.put('/permissions/admins/:uid', authenticateUser, requireAdminPermission('OWNER'), updateAdminPermissions);
+router.delete('/permissions/admins/:uid', authenticateUser, requireAdminPermission('OWNER'), deleteAdminUser);
 
 export default router;
