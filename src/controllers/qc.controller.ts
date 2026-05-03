@@ -16,6 +16,7 @@ const sendQcError = (res: Response, error: any): void => {
     'A product with this SKU already exists',
     'A category with this name or slug already exists',
     'A tag with this name or slug already exists',
+    'heroSlide not found',
   ];
 
   if (error.message === 'QC request not found') {

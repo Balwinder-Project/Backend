@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import Product from '../models/product.model';
 import Category from '../models/category.model';
 import Tag from '../models/tag.model';
+import HeroSlide from '../models/heroSlide.model';
 import CatalogueChangeRequest, {
   CatalogueAction,
   CatalogueEntityType,
@@ -17,6 +18,7 @@ const MODEL_BY_ENTITY = {
   product: Product,
   category: Category,
   tag: Tag,
+  heroSlide: HeroSlide,
 };
 
 const toPlainObject = (doc: any): Record<string, any> | null => {
@@ -235,7 +237,12 @@ export class CatalogueQcService {
       return;
     }
 
-    await this.validateTagPayload(action, payload, targetId);
+    if (entityType === 'tag') {
+      await this.validateTagPayload(action, payload, targetId);
+      return;
+    }
+
+    await this.validateHeroSlidePayload(payload);
   }
 
   private static async validateProductPayload(
@@ -293,5 +300,10 @@ export class CatalogueQcService {
 
     const tag = new Tag(payload);
     await tag.validate();
+  }
+
+  private static async validateHeroSlidePayload(payload: Record<string, any>) {
+    const heroSlide = new HeroSlide(payload);
+    await heroSlide.validate();
   }
 }
