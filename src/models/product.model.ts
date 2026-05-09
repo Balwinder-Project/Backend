@@ -17,6 +17,7 @@ export interface IProduct extends Document {
   sku: string;
   images: string[];
   category: mongoose.Types.ObjectId;
+  subCategory?: mongoose.Types.ObjectId | null;
   tags: mongoose.Types.ObjectId[];
   stock: number;
   isActive: boolean;
@@ -66,6 +67,12 @@ const productSchema = new Schema<IProduct>(
       type: Schema.Types.ObjectId,
       ref: 'Category',
       required: [true, 'Category is required'],
+      index: true,
+    },
+    subCategory: {
+      type: Schema.Types.ObjectId,
+      ref: 'SubCategory',
+      default: null,
       index: true,
     },
     tags: {
@@ -147,6 +154,7 @@ const productSchema = new Schema<IProduct>(
 // Indexes
 productSchema.index({ name: 1 });
 productSchema.index({ category: 1 });
+productSchema.index({ subCategory: 1 });
 productSchema.index({ tags: 1 });
 productSchema.index({ isActive: 1 });
 productSchema.index({ isFeatured: 1 });
@@ -155,4 +163,3 @@ productSchema.index({ sku: 1 });
 const Product = mongoose.model<IProduct>('Product', productSchema);
 
 export default Product;
-

@@ -1,5 +1,6 @@
 import Category, { ICategory } from '../models/category.model';
 import Product from '../models/product.model';
+import SubCategory from '../models/subCategory.model';
 
 export class CategoryService {
   /**
@@ -80,9 +81,17 @@ export class CategoryService {
       };
     }
 
+    const subCategoryCount = await SubCategory.countDocuments({ category: id });
+
+    if (subCategoryCount > 0) {
+      return {
+        success: false,
+        message: `Cannot delete category. ${subCategoryCount} subcategory/subcategories are using this category.`
+      };
+    }
+
     await Category.findByIdAndDelete(id);
     return { success: true };
   }
 }
-
 

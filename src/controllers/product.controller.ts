@@ -18,6 +18,7 @@ const getActor = (req: Request) => ({
 const sendMutationError = (res: Response, error: any, fallbackMessage: string): void => {
   if (
     error.message === 'Category not found' ||
+    error.message === 'Subcategory not found' ||
     error.message === 'One or more tags were not found' ||
     error.message === 'product not found'
   ) {
@@ -66,6 +67,7 @@ export const createProduct = async (req: Request, res: Response): Promise<void> 
       sku,
       images,
       category,
+      subCategory,
       tags,
       stock,
       isActive,
@@ -86,6 +88,7 @@ export const createProduct = async (req: Request, res: Response): Promise<void> 
       sku,
       images: images || [],
       category,
+      subCategory: subCategory || null,
       tags: tags || [],
       stock: stock !== undefined ? stock : 0,
       isActive: isActive !== undefined ? isActive : true,
@@ -133,11 +136,12 @@ export const getAllProducts = async (req: Request, res: Response): Promise<void>
     const limit = parseInt(req.query.limit as string) || 10;
     const search = req.query.search as string;
     const category = req.query.category as string;
+    const subCategory = req.query.subCategory as string;
     const tags = req.query.tags ? (req.query.tags as string).split(',') : undefined;
     const featured = parseBooleanQuery(req.query.featured);
     const active = parseBooleanQuery(req.query.active);
 
-    const result = await ProductService.getAllProducts(page, limit, search, category, tags, featured, active);
+    const result = await ProductService.getAllProducts(page, limit, search, category, subCategory, tags, featured, active);
 
     res.status(200).json({
       success: true,
@@ -205,6 +209,7 @@ export const updateProduct = async (req: Request, res: Response): Promise<void> 
       sku,
       images,
       category,
+      subCategory,
       tags,
       stock,
       isActive,
@@ -225,6 +230,7 @@ export const updateProduct = async (req: Request, res: Response): Promise<void> 
     if (sku) updateData.sku = sku;
     if (images !== undefined) updateData.images = images;
     if (category) updateData.category = category;
+    if (subCategory !== undefined) updateData.subCategory = subCategory || null;
     if (tags !== undefined) updateData.tags = tags;
     if (stock !== undefined) updateData.stock = stock;
     if (isActive !== undefined) updateData.isActive = isActive;

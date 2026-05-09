@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import Product from '../models/product.model';
 import Category from '../models/category.model';
+import SubCategory from '../models/subCategory.model';
 import Tag from '../models/tag.model';
 import HeroSlide from '../models/heroSlide.model';
 import CatalogueChangeRequest, {
@@ -17,6 +18,7 @@ type Actor = {
 const MODEL_BY_ENTITY = {
   product: Product,
   category: Category,
+  subCategory: SubCategory,
   tag: Tag,
   heroSlide: HeroSlide,
 };
@@ -31,6 +33,14 @@ const toPlainObject = (doc: any): Record<string, any> | null => {
 const normalizeSku = (payload: Record<string, any>): Record<string, any> => {
   if (typeof payload.sku !== 'string') return payload;
   return { ...payload, sku: payload.sku.trim().toUpperCase() };
+};
+
+const normalizeProductPayload = (payload: Record<string, any>): Record<string, any> => {
+  const normalized = normalizeSku(payload);
+  if (normalized.subCategory === '') {
+    return { ...normalized, subCategory: null };
+  }
+  return normalized;
 };
 
 const assertObjectId = (id: string, entityType: CatalogueEntityType) => {
@@ -76,11 +86,19 @@ export class CatalogueQcService {
       originalSnapshot = toPlainObject(original);
       if (action === 'update') {
         finalPayload = { ...originalSnapshot, ...(payload || {}) };
+        if (
+          entityType === 'product' &&
+          payload?.category &&
+          !Object.prototype.hasOwnProperty.call(payload, 'subCategory') &&
+          originalSnapshot?.category?.toString() !== payload.category.toString()
+        ) {
+          finalPayload.subCategory = null;
+        }
       }
     }
 
     if (finalPayload && entityType === 'product') {
-      finalPayload = normalizeSku(finalPayload);
+      finalPayload = normalizeProductPayload(finalPayload);
     }
 
     if (action !== 'delete' && finalPayload) {
@@ -109,7 +127,7 @@ export class CatalogueQcService {
     if (request.status !== 'pending_qc1') throw new Error('Request is not pending QC check 1');
 
     if (payload && request.action !== 'delete') {
-      const finalPayload = request.entityType === 'product' ? normalizeSku(payload) : payload;
+      const finalPayload = request.entityType === 'product' ? normalizeProductPayload(payload) : payload;
       await this.validatePayload(request.entityType, request.action, finalPayload, request.targetId?.toString());
       request.payload = finalPayload;
     }
@@ -149,7 +167,7 @@ export class CatalogueQcService {
     if (request.status !== 'pending_qc2') throw new Error('Request is not pending QC check 2');
 
     if (payload && request.action !== 'delete') {
-      request.payload = request.entityType === 'product' ? normalizeSku(payload) : payload;
+      request.payload = request.entityType === 'product' ? normalizeProductPayload(payload) : payload;
     }
 
     if (request.action !== 'delete') {
@@ -215,6 +233,18 @@ export class CatalogueQcService {
       if (productCount > 0) {
         throw new Error(`Cannot delete category. ${productCount} product(s) are using this category.`);
       }
+
+      const subCategoryCount = await SubCategory.countDocuments({ category: request.targetId });
+      if (subCategoryCount > 0) {
+        throw new Error(`Cannot delete category. ${subCategoryCount} subcategory/subcategories are using this category.`);
+      }
+    }
+
+    if (request.entityType === 'subCategory') {
+      const productCount = await Product.countDocuments({ subCategory: request.targetId });
+      if (productCount > 0) {
+        throw new Error(`Cannot delete subcategory. ${productCount} product(s) are using this subcategory.`);
+      }
     }
 
     const deleted = await Model.findByIdAndDelete(request.targetId);
@@ -237,6 +267,11 @@ export class CatalogueQcService {
       return;
     }
 
+    if (entityType === 'subCategory') {
+      await this.validateSubCategoryPayload(action, payload, targetId);
+      return;
+    }
+
     if (entityType === 'tag') {
       await this.validateTagPayload(action, payload, targetId);
       return;
@@ -253,6 +288,16 @@ export class CatalogueQcService {
     if (payload.category) {
       const category = await Category.findById(payload.category);
       if (!category) throw new Error('Category not found');
+    }
+
+    if (payload.subCategory) {
+      if (!payload.category) throw new Error('Category not found');
+
+      const subCategory = await SubCategory.findOne({
+        _id: payload.subCategory,
+        category: payload.category,
+      });
+      if (!subCategory) throw new Error('Subcategory not found');
     }
 
     if (Array.isArray(payload.tags) && payload.tags.length > 0) {
@@ -285,6 +330,37 @@ export class CatalogueQcService {
 
     const category = new Category(payload);
     await category.validate();
+  }
+
+  private static async validateSubCategoryPayload(
+    _action: CatalogueAction,
+    payload: Record<string, any>,
+    targetId?: string
+  ) {
+    const category = await Category.findById(payload.category);
+    if (!category) throw new Error('Category not found');
+
+    if (targetId) {
+      const existing = await SubCategory.findById(targetId);
+      if (!existing) throw new Error('subCategory not found');
+
+      if (existing.category.toString() !== payload.category?.toString()) {
+        const productCount = await Product.countDocuments({ subCategory: targetId });
+        if (productCount > 0) {
+          throw new Error(`Cannot change subcategory category. ${productCount} product(s) are using this subcategory.`);
+        }
+      }
+    }
+
+    const duplicate = await SubCategory.findOne({
+      category: payload.category,
+      $or: [{ name: payload.name }, { slug: payload.slug }],
+      ...(targetId ? { _id: { $ne: targetId } } : {}),
+    });
+    if (duplicate) throw new Error('A subcategory with this name or slug already exists');
+
+    const subCategory = new SubCategory(payload);
+    await subCategory.validate();
   }
 
   private static async validateTagPayload(

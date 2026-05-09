@@ -1,8 +1,10 @@
 import Product, { IProduct } from '../models/product.model';
 import Category from '../models/category.model';
+import SubCategory from '../models/subCategory.model';
 
 interface ProductQuery {
   category?: string;
+  subCategory?: string;
   tags?: { $in: string[] };
   isActive?: boolean;
   isFeatured?: boolean;
@@ -19,10 +21,14 @@ export class ProductService {
   }
 
   /**
-   * Create a new product
+   * Check if subcategory exists and belongs to the supplied category
    */
-  static async createProduct(data: Partial<IProduct>): Promise<IProduct> {
-    // Validate category exists
+  static async checkSubCategoryBelongsToCategory(subCategoryId: string, categoryId: string): Promise<boolean> {
+    const subCategory = await SubCategory.findOne({ _id: subCategoryId, category: categoryId });
+    return !!subCategory;
+  }
+
+  private static async validateProductCategoryPair(data: Partial<IProduct>): Promise<void> {
     if (data.category) {
       const categoryExists = await this.checkCategoryExists(data.category.toString());
       if (!categoryExists) {
@@ -30,8 +36,29 @@ export class ProductService {
       }
     }
 
+    if (data.subCategory) {
+      if (!data.category) {
+        throw new Error('Category not found');
+      }
+
+      const subCategoryMatches = await this.checkSubCategoryBelongsToCategory(
+        data.subCategory.toString(),
+        data.category.toString()
+      );
+      if (!subCategoryMatches) {
+        throw new Error('Subcategory not found');
+      }
+    }
+  }
+
+  /**
+   * Create a new product
+   */
+  static async createProduct(data: Partial<IProduct>): Promise<IProduct> {
+    await this.validateProductCategoryPair(data);
+
     const product = await Product.create(data);
-    return await product.populate(['category', 'tags']);
+    return await product.populate(['category', 'subCategory', 'tags']);
   }
 
   /**
@@ -42,6 +69,7 @@ export class ProductService {
     limit: number = 10,
     search?: string,
     categoryId?: string,
+    subCategoryId?: string,
     tagIds?: string[],
     featured?: boolean,
     isActive?: boolean
@@ -53,6 +81,10 @@ export class ProductService {
     
     if (categoryId) {
       query.category = categoryId;
+    }
+
+    if (subCategoryId) {
+      query.subCategory = subCategoryId;
     }
     
     if (tagIds && tagIds.length > 0) {
@@ -78,6 +110,7 @@ export class ProductService {
     const [products, total] = await Promise.all([
       Product.find(query)
         .populate('category')
+        .populate('subCategory')
         .populate('tags')
         .sort({ createdAt: -1 })
         .skip(skip)
@@ -99,6 +132,7 @@ export class ProductService {
   static async getProductById(id: string): Promise<IProduct | null> {
     return await Product.findById(id)
       .populate('category')
+      .populate('subCategory')
       .populate('tags');
   }
 
@@ -106,16 +140,26 @@ export class ProductService {
    * Update product
    */
   static async updateProduct(id: string, data: Partial<IProduct>): Promise<IProduct | null> {
-    // Validate category exists if it's being updated
-    if (data.category) {
-      const categoryExists = await this.checkCategoryExists(data.category.toString());
-      if (!categoryExists) {
-        throw new Error('Category not found');
-      }
+    const existing = await Product.findById(id);
+    if (!existing) return null;
+
+    const categoryChanged = data.category && data.category.toString() !== existing.category.toString();
+    if (categoryChanged && !Object.prototype.hasOwnProperty.call(data, 'subCategory')) {
+      data.subCategory = null;
     }
+
+    const validationData = {
+      category: data.category || existing.category,
+      subCategory: Object.prototype.hasOwnProperty.call(data, 'subCategory')
+        ? data.subCategory
+        : existing.subCategory,
+    } as Partial<IProduct>;
+
+    await this.validateProductCategoryPair(validationData);
 
     return await Product.findByIdAndUpdate(id, data, { new: true, runValidators: true })
       .populate('category')
+      .populate('subCategory')
       .populate('tags');
   }
 
@@ -127,4 +171,3 @@ export class ProductService {
     return !!result;
   }
 }
-

@@ -12,9 +12,11 @@ const sendQcError = (res: Response, error: any): void => {
     'Request is not pending QC check 1',
     'Request is not pending QC check 2',
     'Category not found',
+    'Subcategory not found',
     'One or more tags were not found',
     'A product with this SKU already exists',
     'A category with this name or slug already exists',
+    'A subcategory with this name or slug already exists',
     'A tag with this name or slug already exists',
     'heroSlide not found',
   ];
@@ -30,6 +32,8 @@ const sendQcError = (res: Response, error: any): void => {
   if (
     badRequestMessages.includes(error.message) ||
     error.message?.startsWith('Cannot delete category.') ||
+    error.message?.startsWith('Cannot delete subcategory.') ||
+    error.message?.startsWith('Cannot change subcategory category.') ||
     error.name === 'ValidationError'
   ) {
     res.status(400).json({

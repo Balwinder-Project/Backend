@@ -1,6 +1,6 @@
 import mongoose, { Document, Schema } from 'mongoose';
 
-export type CatalogueEntityType = 'product' | 'category' | 'tag' | 'heroSlide';
+export type CatalogueEntityType = 'product' | 'category' | 'subCategory' | 'tag' | 'heroSlide';
 export type CatalogueAction = 'create' | 'update' | 'delete';
 export type CatalogueChangeStatus =
   | 'pending_qc1'
@@ -36,7 +36,7 @@ const catalogueChangeRequestSchema = new Schema<ICatalogueChangeRequest>(
   {
     entityType: {
       type: String,
-      enum: ['product', 'category', 'tag', 'heroSlide'],
+      enum: ['product', 'category', 'subCategory', 'tag', 'heroSlide'],
       required: true,
       index: true,
     },

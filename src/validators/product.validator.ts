@@ -5,7 +5,7 @@ import { Request, Response, NextFunction } from 'express';
  */
 export const validateProductData = (isUpdate: boolean = false) => {
   return (req: Request, res: Response, next: NextFunction): void => {
-    const { name, description, price, sku, category, tags, stock, images, isActive, isFeatured, normalUserPricing, retailerPricing } = req.body;
+    const { name, description, price, sku, category, subCategory, tags, stock, images, isActive, isFeatured, normalUserPricing, retailerPricing } = req.body;
     const errors: string[] = [];
 
     // Validate name
@@ -46,6 +46,13 @@ export const validateProductData = (isUpdate: boolean = false) => {
         errors.push('Category is required');
       } else if (category && !/^[0-9a-fA-F]{24}$/.test(category)) {
         errors.push('Invalid category ID format');
+      }
+    }
+
+    // Validate tags (optional array)
+    if (subCategory !== undefined && subCategory !== null && subCategory !== '') {
+      if (!/^[0-9a-fA-F]{24}$/.test(subCategory)) {
+        errors.push('Invalid subcategory ID format');
       }
     }
 
@@ -158,4 +165,3 @@ export const validateObjectId = (req: Request, res: Response, next: NextFunction
 
   next();
 };
-
