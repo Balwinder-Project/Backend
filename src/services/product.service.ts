@@ -11,6 +11,10 @@ interface ProductQuery {
   $or?: any[];
 }
 
+const escapeRegex = (value: string): string => {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+};
+
 export class ProductService {
   /**
    * Check if category exists
@@ -99,11 +103,13 @@ export class ProductService {
       query.isActive = isActive;
     }
     
-    if (search) {
+    const searchTerm = search?.trim();
+    if (searchTerm) {
+      const safeSearch = escapeRegex(searchTerm);
       query.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } },
-        { sku: { $regex: search, $options: 'i' } }
+        { name: { $regex: safeSearch, $options: 'i' } },
+        { description: { $regex: safeSearch, $options: 'i' } },
+        { sku: { $regex: safeSearch, $options: 'i' } }
       ];
     }
 
