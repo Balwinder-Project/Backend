@@ -3,7 +3,7 @@ import { generateSlug } from '../utils/slug';
 
 export const validateSubCategoryData = (isUpdate: boolean = false) => {
   return (req: Request, res: Response, next: NextFunction): void => {
-    const { name, description, category, isActive } = req.body;
+    const { name, description, category, isActive, parent } = req.body;
     const errors: string[] = [];
 
     if (!isUpdate || name !== undefined) {
@@ -23,6 +23,12 @@ export const validateSubCategoryData = (isUpdate: boolean = false) => {
         errors.push('Category is required');
       } else if (category && !/^[0-9a-fA-F]{24}$/.test(category)) {
         errors.push('Invalid category ID format');
+      }
+    }
+
+    if (parent !== undefined && parent !== null && parent !== '') {
+      if (!/^[0-9a-fA-F]{24}$/.test(parent)) {
+        errors.push('Invalid parent subcategory ID format');
       }
     }
 

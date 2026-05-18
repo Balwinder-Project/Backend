@@ -5,7 +5,7 @@ import { Request, Response, NextFunction } from 'express';
  */
 export const validateProductData = (isUpdate: boolean = false) => {
   return (req: Request, res: Response, next: NextFunction): void => {
-    const { name, description, price, sku, category, subCategory, tags, stock, images, isActive, isFeatured, normalUserPricing, retailerPricing } = req.body;
+    const { name, description, price, sku, category, subCategories, tags, stock, images, isActive, isFeatured, normalUserPricing, retailerPricing } = req.body;
     const errors: string[] = [];
 
     // Validate name
@@ -49,10 +49,15 @@ export const validateProductData = (isUpdate: boolean = false) => {
       }
     }
 
-    // Validate tags (optional array)
-    if (subCategory !== undefined && subCategory !== null && subCategory !== '') {
-      if (!/^[0-9a-fA-F]{24}$/.test(subCategory)) {
-        errors.push('Invalid subcategory ID format');
+    // Validate subCategories (optional array)
+    if (subCategories !== undefined) {
+      if (!Array.isArray(subCategories)) {
+        errors.push('subCategories must be an array');
+      } else {
+        const invalidIds = subCategories.filter((id: any) => !/^[0-9a-fA-F]{24}$/.test(id));
+        if (invalidIds.length > 0) {
+          errors.push('Invalid subcategory ID format in subCategories');
+        }
       }
     }
 

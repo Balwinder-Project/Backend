@@ -37,8 +37,12 @@ const normalizeSku = (payload: Record<string, any>): Record<string, any> => {
 
 const normalizeProductPayload = (payload: Record<string, any>): Record<string, any> => {
   const normalized = normalizeSku(payload);
-  if (normalized.subCategory === '') {
-    return { ...normalized, subCategory: null };
+  if (Object.prototype.hasOwnProperty.call(normalized, 'subCategories')) {
+    const subCats = normalized.subCategories;
+    if (!Array.isArray(subCats)) {
+      return { ...normalized, subCategories: subCats ? [subCats] : [] };
+    }
+    return { ...normalized, subCategories: subCats.filter((id: any) => id && id !== '') };
   }
   return normalized;
 };
@@ -89,10 +93,10 @@ export class CatalogueQcService {
         if (
           entityType === 'product' &&
           payload?.category &&
-          !Object.prototype.hasOwnProperty.call(payload, 'subCategory') &&
+          !Object.prototype.hasOwnProperty.call(payload, 'subCategories') &&
           originalSnapshot?.category?.toString() !== payload.category.toString()
         ) {
-          finalPayload.subCategory = null;
+          finalPayload.subCategories = [];
         }
       }
     }
@@ -241,7 +245,13 @@ export class CatalogueQcService {
     }
 
     if (request.entityType === 'subCategory') {
-      const productCount = await Product.countDocuments({ subCategory: request.targetId });
+      const [productCount, childCount] = await Promise.all([
+        Product.countDocuments({ subCategories: request.targetId }),
+        SubCategory.countDocuments({ parent: request.targetId }),
+      ]);
+      if (childCount > 0) {
+        throw new Error(`Cannot delete subcategory. ${childCount} child subcategory/subcategories exist.`);
+      }
       if (productCount > 0) {
         throw new Error(`Cannot delete subcategory. ${productCount} product(s) are using this subcategory.`);
       }
@@ -290,14 +300,16 @@ export class CatalogueQcService {
       if (!category) throw new Error('Category not found');
     }
 
-    if (payload.subCategory) {
+    if (Array.isArray(payload.subCategories) && payload.subCategories.length > 0) {
       if (!payload.category) throw new Error('Category not found');
 
-      const subCategory = await SubCategory.findOne({
-        _id: payload.subCategory,
+      const count = await SubCategory.countDocuments({
+        _id: { $in: payload.subCategories },
         category: payload.category,
       });
-      if (!subCategory) throw new Error('Subcategory not found');
+      if (count !== payload.subCategories.length) {
+        throw new Error('One or more subcategories not found or do not belong to the selected category');
+      }
     }
 
     if (Array.isArray(payload.tags) && payload.tags.length > 0) {
@@ -345,10 +357,25 @@ export class CatalogueQcService {
       if (!existing) throw new Error('subCategory not found');
 
       if (existing.category.toString() !== payload.category?.toString()) {
-        const productCount = await Product.countDocuments({ subCategory: targetId });
+        const productCount = await Product.countDocuments({ subCategories: targetId });
         if (productCount > 0) {
           throw new Error(`Cannot change subcategory category. ${productCount} product(s) are using this subcategory.`);
         }
+        const childCount = await SubCategory.countDocuments({ parent: targetId });
+        if (childCount > 0) {
+          throw new Error(`Cannot change subcategory category. ${childCount} child subcategory/subcategories exist.`);
+        }
+      }
+    }
+
+    if (payload.parent) {
+      const parent = await SubCategory.findById(payload.parent);
+      if (!parent) throw new Error('Parent subcategory not found');
+      if (parent.category.toString() !== payload.category?.toString()) {
+        throw new Error('Parent subcategory must belong to the same category');
+      }
+      if (targetId && payload.parent === targetId) {
+        throw new Error('Subcategory cannot be its own parent');
       }
     }
 

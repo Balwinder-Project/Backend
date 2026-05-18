@@ -20,6 +20,7 @@ const sendMutationError = (res: Response, error: any, fallbackMessage: string): 
   if (
     error.message === 'Category not found' ||
     error.message === 'Subcategory not found' ||
+    error.message === 'One or more subcategories not found or do not belong to the selected category' ||
     error.message === 'One or more tags were not found' ||
     error.message === 'product not found'
   ) {
@@ -68,7 +69,7 @@ export const createProduct = async (req: Request, res: Response): Promise<void> 
       sku,
       images,
       category,
-      subCategory,
+      subCategories,
       tags,
       stock,
       isActive,
@@ -89,7 +90,7 @@ export const createProduct = async (req: Request, res: Response): Promise<void> 
       sku,
       images: images || [],
       category,
-      subCategory: subCategory || null,
+      subCategories: subCategories || [],
       tags: tags || [],
       stock: stock !== undefined ? stock : 0,
       isActive: isActive !== undefined ? isActive : true,
@@ -231,7 +232,7 @@ export const updateProduct = async (req: Request, res: Response): Promise<void> 
       sku,
       images,
       category,
-      subCategory,
+      subCategories,
       tags,
       stock,
       isActive,
@@ -252,7 +253,7 @@ export const updateProduct = async (req: Request, res: Response): Promise<void> 
     if (sku) updateData.sku = sku;
     if (images !== undefined) updateData.images = images;
     if (category) updateData.category = category;
-    if (subCategory !== undefined) updateData.subCategory = subCategory || null;
+    if (subCategories !== undefined) updateData.subCategories = subCategories || [];
     if (tags !== undefined) updateData.tags = tags;
     if (stock !== undefined) updateData.stock = stock;
     if (isActive !== undefined) updateData.isActive = isActive;

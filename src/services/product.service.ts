@@ -4,7 +4,7 @@ import SubCategory from '../models/subCategory.model';
 
 interface ProductQuery {
   category?: string;
-  subCategory?: string;
+  subCategories?: string;
   tags?: { $in: string[] };
   isActive?: boolean;
   isFeatured?: boolean;
@@ -24,15 +24,7 @@ export class ProductService {
     return !!category;
   }
 
-  /**
-   * Check if subcategory exists and belongs to the supplied category
-   */
-  static async checkSubCategoryBelongsToCategory(subCategoryId: string, categoryId: string): Promise<boolean> {
-    const subCategory = await SubCategory.findOne({ _id: subCategoryId, category: categoryId });
-    return !!subCategory;
-  }
-
-  private static async validateProductCategoryPair(data: Partial<IProduct>): Promise<void> {
+  private static async validateProductRelationships(data: Partial<IProduct>): Promise<void> {
     if (data.category) {
       const categoryExists = await this.checkCategoryExists(data.category.toString());
       if (!categoryExists) {
@@ -40,17 +32,18 @@ export class ProductService {
       }
     }
 
-    if (data.subCategory) {
+    if (data.subCategories && data.subCategories.length > 0) {
       if (!data.category) {
         throw new Error('Category not found');
       }
 
-      const subCategoryMatches = await this.checkSubCategoryBelongsToCategory(
-        data.subCategory.toString(),
-        data.category.toString()
-      );
-      if (!subCategoryMatches) {
-        throw new Error('Subcategory not found');
+      const subCategoryIds = data.subCategories.map(id => id.toString());
+      const count = await SubCategory.countDocuments({
+        _id: { $in: subCategoryIds },
+        category: data.category,
+      });
+      if (count !== subCategoryIds.length) {
+        throw new Error('One or more subcategories not found or do not belong to the selected category');
       }
     }
   }
@@ -59,10 +52,10 @@ export class ProductService {
    * Create a new product
    */
   static async createProduct(data: Partial<IProduct>): Promise<IProduct> {
-    await this.validateProductCategoryPair(data);
+    await this.validateProductRelationships(data);
 
     const product = await Product.create(data);
-    return await product.populate(['category', 'subCategory', 'tags']);
+    return await product.populate(['category', 'subCategories', 'tags']);
   }
 
   /**
@@ -79,18 +72,18 @@ export class ProductService {
     isActive?: boolean
   ): Promise<{ products: IProduct[]; total: number; page: number; totalPages: number }> {
     const skip = (page - 1) * limit;
-    
+
     // Build query
     const query: ProductQuery = {};
-    
+
     if (categoryId) {
       query.category = categoryId;
     }
 
     if (subCategoryId) {
-      query.subCategory = subCategoryId;
+      query.subCategories = subCategoryId;
     }
-    
+
     if (tagIds && tagIds.length > 0) {
       query.tags = { $in: tagIds };
     }
@@ -102,7 +95,7 @@ export class ProductService {
     if (typeof isActive === 'boolean') {
       query.isActive = isActive;
     }
-    
+
     const searchTerm = search?.trim();
     if (searchTerm) {
       const safeSearch = escapeRegex(searchTerm);
@@ -116,7 +109,7 @@ export class ProductService {
     const [products, total] = await Promise.all([
       Product.find(query)
         .populate('category')
-        .populate('subCategory')
+        .populate('subCategories')
         .populate('tags')
         .sort({ createdAt: -1 })
         .skip(skip)
@@ -138,7 +131,7 @@ export class ProductService {
   static async getProductById(id: string): Promise<IProduct | null> {
     return await Product.findById(id)
       .populate('category')
-      .populate('subCategory')
+      .populate('subCategories')
       .populate('tags');
   }
 
@@ -150,22 +143,22 @@ export class ProductService {
     if (!existing) return null;
 
     const categoryChanged = data.category && data.category.toString() !== existing.category.toString();
-    if (categoryChanged && !Object.prototype.hasOwnProperty.call(data, 'subCategory')) {
-      data.subCategory = null;
+    if (categoryChanged && !Object.prototype.hasOwnProperty.call(data, 'subCategories')) {
+      data.subCategories = [];
     }
 
     const validationData = {
       category: data.category || existing.category,
-      subCategory: Object.prototype.hasOwnProperty.call(data, 'subCategory')
-        ? data.subCategory
-        : existing.subCategory,
+      subCategories: Object.prototype.hasOwnProperty.call(data, 'subCategories')
+        ? data.subCategories
+        : existing.subCategories,
     } as Partial<IProduct>;
 
-    await this.validateProductCategoryPair(validationData);
+    await this.validateProductRelationships(validationData);
 
     return await Product.findByIdAndUpdate(id, data, { new: true, runValidators: true })
       .populate('category')
-      .populate('subCategory')
+      .populate('subCategories')
       .populate('tags');
   }
 

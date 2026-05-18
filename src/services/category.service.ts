@@ -93,5 +93,33 @@ export class CategoryService {
     await Category.findByIdAndDelete(id);
     return { success: true };
   }
+
+  static async getNavigationTree(): Promise<any[]> {
+    const [categories, subCategories] = await Promise.all([
+      Category.find({ isActive: true }).sort({ name: 1 }).lean(),
+      SubCategory.find({ isActive: true }).sort({ name: 1 }).lean(),
+    ]);
+
+    const buildSubTree = (categoryId: string, parentId: string | null): any[] => {
+      return subCategories
+        .filter(sc => {
+          const scParent = sc.parent ? sc.parent.toString() : null;
+          return sc.category.toString() === categoryId && scParent === parentId;
+        })
+        .map(sc => ({
+          id: sc._id,
+          name: sc.name,
+          slug: sc.slug,
+          children: buildSubTree(categoryId, sc._id.toString()),
+        }));
+    };
+
+    return categories.map(cat => ({
+      id: cat._id,
+      name: cat.name,
+      slug: cat.slug,
+      children: buildSubTree(cat._id.toString(), null),
+    }));
+  }
 }
 

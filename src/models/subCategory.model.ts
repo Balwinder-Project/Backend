@@ -5,6 +5,7 @@ export interface ISubCategory extends Document {
   description?: string;
   slug: string;
   category: mongoose.Types.ObjectId;
+  parent?: mongoose.Types.ObjectId | null;
   isActive: boolean;
   fieldTemplate?: any;
   createdAt: Date;
@@ -37,6 +38,12 @@ const subCategorySchema = new Schema<ISubCategory>(
       required: [true, 'Parent category is required'],
       index: true,
     },
+    parent: {
+      type: Schema.Types.ObjectId,
+      ref: 'SubCategory',
+      default: null,
+      index: true,
+    },
     isActive: {
       type: Boolean,
       default: true,
@@ -57,7 +64,7 @@ const subCategorySchema = new Schema<ISubCategory>(
   }
 );
 
-subCategorySchema.index({ category: 1, name: 1 }, { unique: true });
+subCategorySchema.index({ category: 1, parent: 1, name: 1 }, { unique: true });
 subCategorySchema.index({ category: 1, slug: 1 }, { unique: true });
 subCategorySchema.index({ isActive: 1 });
 

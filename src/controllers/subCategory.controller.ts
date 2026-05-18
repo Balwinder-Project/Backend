@@ -40,7 +40,12 @@ const sendSubCategoryMutationError = (res: Response, error: any, fallbackMessage
     return;
   }
 
-  if (error.message?.startsWith('Cannot change subcategory category.')) {
+  if (
+    error.message?.startsWith('Cannot change subcategory category.') ||
+    error.message === 'Parent subcategory not found' ||
+    error.message === 'Parent subcategory must belong to the same category' ||
+    error.message === 'Subcategory cannot be its own parent'
+  ) {
     res.status(400).json({
       success: false,
       message: error.message,
@@ -67,13 +72,14 @@ const sendSubCategoryMutationError = (res: Response, error: any, fallbackMessage
 
 export const createSubCategory = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { name, description, category, isActive, fieldTemplate } = req.body;
+    const { name, description, category, isActive, fieldTemplate, parent } = req.body;
 
     const subCategoryData = {
       name,
       description,
       slug: req.body.slug,
       category,
+      parent: parent || null,
       isActive: isActive !== undefined ? isActive : true,
       fieldTemplate: fieldTemplate || null,
     };
@@ -109,7 +115,10 @@ export const getAllSubCategories = async (req: Request, res: Response): Promise<
     const category = req.query.category as string;
     const active = parseBooleanQuery(req.query.active);
 
-    const result = await SubCategoryService.getAllSubCategories(page, limit, search, category, active);
+    const parent = req.query.parent as string | undefined;
+    const parentFilter = parent === 'null' ? null : parent;
+
+    const result = await SubCategoryService.getAllSubCategories(page, limit, search, category, active, parentFilter);
 
     res.status(200).json({
       success: true,
@@ -190,12 +199,13 @@ export const getSubCategoryBySlugs = async (req: Request, res: Response): Promis
 export const updateSubCategory = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const { name, description, category, isActive, fieldTemplate } = req.body;
+    const { name, description, category, isActive, fieldTemplate, parent } = req.body;
 
     const updateData: any = {};
     if (name) updateData.name = name;
     if (description !== undefined) updateData.description = description;
     if (category !== undefined) updateData.category = category;
+    if (parent !== undefined) updateData.parent = parent || null;
     if (isActive !== undefined) updateData.isActive = isActive;
     if (fieldTemplate !== undefined) updateData.fieldTemplate = fieldTemplate;
     if (req.body.slug) updateData.slug = req.body.slug;

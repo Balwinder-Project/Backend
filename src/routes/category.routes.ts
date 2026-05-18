@@ -4,6 +4,7 @@ import {
   getAllCategories,
   getCategoryById,
   getCategoryBySlug,
+  getNavigationTree,
   updateCategory,
   deleteCategory
 } from '../controllers/category.controller';
@@ -18,6 +19,14 @@ const router = Router();
  * Public endpoint - no authentication required
  */
 router.get('/', getAllCategories);
+
+/**
+ * GET /api/v1/categories/navigation-tree
+ * Get full category/subcategory hierarchy for navigation
+ * Public endpoint - no authentication required
+ * IMPORTANT: This must come BEFORE /:id route
+ */
+router.get('/navigation-tree', getNavigationTree);
 
 /**
  * GET /api/v1/categories/slug/:slug

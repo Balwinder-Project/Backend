@@ -228,6 +228,29 @@ export const updateCategory = async (req: Request, res: Response): Promise<void>
 };
 
 /**
+ * Get navigation tree (categories with nested subcategories)
+ * GET /api/v1/categories/navigation-tree
+ */
+export const getNavigationTree = async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const tree = await CategoryService.getNavigationTree();
+
+    res.set('Cache-Control', 'public, max-age=60');
+    res.status(200).json({
+      success: true,
+      data: tree,
+    });
+  } catch (error: any) {
+    console.error('Error fetching navigation tree:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch navigation tree',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+    });
+  }
+};
+
+/**
  * Delete category
  * DELETE /api/v1/categories/:id
  */
