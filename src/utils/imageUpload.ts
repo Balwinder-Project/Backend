@@ -1,5 +1,5 @@
 import cloudinary from '../config/cloudinary';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
 
 /**
  * Upload image to Cloudinary
@@ -18,7 +18,7 @@ export const uploadImageToCloudinary = async (
     const base64Image = `data:image/jpeg;base64,${fileBuffer.toString('base64')}`;
     
     // Generate unique public_id
-    const publicId = `balwinder/${folder}/${uuidv4()}-${filename.split('.')[0]}`;
+    const publicId = `balwinder/${folder}/${randomUUID()}-${filename.split('.')[0]}`;
     
     // Upload to Cloudinary
     const result = await cloudinary.uploader.upload(base64Image, {
