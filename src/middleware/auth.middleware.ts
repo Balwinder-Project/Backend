@@ -105,6 +105,34 @@ export const requireClaims = (requiredClaims: Record<string, any>) => {
 };
 
 /**
+ * Optional authentication middleware
+ * Populates req.user if a valid token is present, but does not reject unauthenticated requests.
+ * Used on public endpoints that need to detect admin users for response customization.
+ */
+export const optionalAuth = async (
+  req: Request,
+  _res: Response,
+  next: NextFunction
+): Promise<void> => {
+  const authHeader = req.headers.authorization;
+  if (authHeader?.startsWith('Bearer ')) {
+    const token = authHeader.split('Bearer ')[1];
+    try {
+      const decodedToken = await verifyIdToken(token);
+      req.user = {
+        ...decodedToken,
+        uid: decodedToken.uid,
+        email: decodedToken.email,
+        name: decodedToken.name,
+      };
+    } catch {
+      // Invalid token — treat as unauthenticated
+    }
+  }
+  next();
+};
+
+/**
  * Middleware to check if user has admin role
  */
 export const requireAdmin = requireClaims({ role: 'admin' });

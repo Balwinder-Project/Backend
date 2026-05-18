@@ -1,7 +1,8 @@
 import { Request, Response } from 'express';
 import { ProductService } from '../services/product.service';
 import { CatalogueQcService } from '../services/catalogueQc.service';
-import { hasAdminPermission } from '../constants/adminRoles';
+import { ADMIN_ROLE_CLAIM, hasAdminPermission } from '../constants/adminRoles';
+import { transformProductImages } from '../utils/imageTransform';
 
 const parseBooleanQuery = (value: unknown): boolean | undefined => {
   if (typeof value !== 'string') return undefined;
@@ -143,9 +144,18 @@ export const getAllProducts = async (req: Request, res: Response): Promise<void>
 
     const result = await ProductService.getAllProducts(page, limit, search, category, subCategory, tags, featured, active);
 
+    const isAdmin = req.user?.role === ADMIN_ROLE_CLAIM;
+    const products = isAdmin
+      ? result.products
+      : result.products.map((p: any) => {
+          const obj = typeof p.toJSON === 'function' ? p.toJSON() : { ...p };
+          obj.images = transformProductImages(obj.images || [], 'thumbnail');
+          return obj;
+        });
+
     res.status(200).json({
       success: true,
-      data: result.products,
+      data: products,
       pagination: {
         page: result.page,
         limit,
@@ -181,9 +191,21 @@ export const getProductById = async (req: Request, res: Response): Promise<void>
       return;
     }
 
+    const isAdmin = req.user?.role === ADMIN_ROLE_CLAIM;
+    if (isAdmin) {
+      res.status(200).json({
+        success: true,
+        data: product
+      });
+      return;
+    }
+
+    const productObj: any = typeof (product as any).toJSON === 'function' ? (product as any).toJSON() : { ...product };
+    productObj.images = transformProductImages(productObj.images || [], 'watermarked');
+
     res.status(200).json({
       success: true,
-      data: product
+      data: productObj
     });
   } catch (error: any) {
     console.error('Error fetching product:', error);

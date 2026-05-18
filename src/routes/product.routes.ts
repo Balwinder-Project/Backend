@@ -6,7 +6,7 @@ import {
   updateProduct,
   deleteProduct
 } from '../controllers/product.controller';
-import { authenticateUser, requireAnyAdminPermission } from '../middleware/auth.middleware';
+import { authenticateUser, optionalAuth, requireAnyAdminPermission } from '../middleware/auth.middleware';
 import { validateProductData, validateObjectId } from '../validators/product.validator';
 
 const router = Router();
@@ -16,14 +16,14 @@ const router = Router();
  * Get all products with pagination, search, and filters
  * Public endpoint - no authentication required
  */
-router.get('/', getAllProducts);
+router.get('/', optionalAuth, getAllProducts);
 
 /**
  * GET /api/v1/products/:id
  * Get a single product by ID
  * Public endpoint - no authentication required
  */
-router.get('/:id', validateObjectId, getProductById);
+router.get('/:id', optionalAuth, validateObjectId, getProductById);
 
 /**
  * POST /api/v1/products
