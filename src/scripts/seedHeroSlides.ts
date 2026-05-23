@@ -3,7 +3,7 @@ import path from 'path';
 import { readFile } from 'fs/promises';
 import { connectDatabase, disconnectDatabase } from '../config/database';
 import HeroSlide from '../models/heroSlide.model';
-import { uploadImageToCloudinary } from '../utils/imageUpload';
+import { uploadImageToB2 } from '../utils/imageUpload';
 
 dotenv.config();
 
@@ -39,7 +39,7 @@ const heroSlides = [
 
 const getUploadedImageUrl = async (imageFilename: string): Promise<string> => {
   const existing = await HeroSlide.findOne({
-    imageUrl: /^https:\/\/res\.cloudinary\.com\//,
+    imageUrl: /^https:\/\/f\d+\.backblazeb2\.com\//,
     title: heroSlides.find((slide) => slide.imageFilename === imageFilename)?.title,
   });
 
@@ -49,7 +49,7 @@ const getUploadedImageUrl = async (imageFilename: string): Promise<string> => {
 
   const imagePath = path.resolve(__dirname, '../../../stickerprinting/public/hero', imageFilename);
   const fileBuffer = await readFile(imagePath);
-  return uploadImageToCloudinary(fileBuffer, imageFilename, 'hero-slides');
+  return uploadImageToB2(fileBuffer, imageFilename, 'hero-slides');
 };
 
 const seedHeroSlides = async (): Promise<void> => {

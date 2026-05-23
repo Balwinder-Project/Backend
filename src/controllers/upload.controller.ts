@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { uploadImageToCloudinary, uploadMultipleImages } from '../utils/imageUpload';
+import { uploadImageToB2, uploadMultipleImages } from '../utils/imageUpload';
 
 /**
  * Upload single image
@@ -16,7 +16,7 @@ export const uploadSingleImage = async (req: Request, res: Response): Promise<vo
     }
 
     const folder = req.body.folder || 'products';
-    const imageUrl = await uploadImageToCloudinary(
+    const imageUrl = await uploadImageToB2(
       req.file.buffer,
       req.file.originalname,
       folder

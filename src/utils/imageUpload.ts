@@ -1,48 +1,58 @@
-import cloudinary from '../config/cloudinary';
+import { PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import { s3Client, B2_BUCKET_NAME, B2_PUBLIC_URL } from '../config/b2';
 import { randomUUID } from 'crypto';
+import sharp from 'sharp';
 
 /**
- * Upload image to Cloudinary
- * @param fileBuffer - File buffer
- * @param filename - Original filename
- * @param folder - Storage folder (e.g., 'products', 'categories')
- * @returns Public URL of uploaded image
+ * Upload image to Backblaze B2
+ * Uploads both original (webp) and thumbnail (400x400 webp) variants.
+ * @returns Public URL of the original image
  */
-export const uploadImageToCloudinary = async (
+export const uploadImageToB2 = async (
   fileBuffer: Buffer,
   filename: string,
   folder: string = 'products'
 ): Promise<string> => {
   try {
-    // Convert buffer to base64
-    const base64Image = `data:image/jpeg;base64,${fileBuffer.toString('base64')}`;
-    
-    // Generate unique public_id
-    const publicId = `balwinder/${folder}/${randomUUID()}-${filename.split('.')[0]}`;
-    
-    // Upload to Cloudinary
-    const result = await cloudinary.uploader.upload(base64Image, {
-      public_id: publicId,
-      folder: `balwinder/${folder}`,
-      resource_type: 'auto',
-      transformation: [
-        { quality: 'auto', fetch_format: 'auto' }
-      ]
-    });
-    
-    // Return secure URL
-    return result.secure_url;
+    const baseName = filename.split('.')[0];
+    const key = `balwinder/${folder}/${randomUUID()}-${baseName}`;
+
+    // Process original: convert to webp with auto quality
+    const originalBuffer = await sharp(fileBuffer)
+      .webp({ quality: 80 })
+      .toBuffer();
+
+    // Process thumbnail: 400x400 cover crop, lower quality
+    const thumbBuffer = await sharp(fileBuffer)
+      .resize(400, 400, { fit: 'cover' })
+      .webp({ quality: 60 })
+      .toBuffer();
+
+    // Upload both variants in parallel
+    await Promise.all([
+      s3Client.send(new PutObjectCommand({
+        Bucket: B2_BUCKET_NAME,
+        Key: `${key}.webp`,
+        Body: originalBuffer,
+        ContentType: 'image/webp',
+      })),
+      s3Client.send(new PutObjectCommand({
+        Bucket: B2_BUCKET_NAME,
+        Key: `${key}-thumb.webp`,
+        Body: thumbBuffer,
+        ContentType: 'image/webp',
+      })),
+    ]);
+
+    return `${B2_PUBLIC_URL}/${key}.webp`;
   } catch (error) {
-    console.error('Error uploading image to Cloudinary:', error);
+    console.error('Error uploading image to B2:', error);
     throw new Error('Failed to upload image');
   }
 };
 
 /**
- * Upload multiple images to Cloudinary
- * @param files - Array of file buffers with filenames
- * @param folder - Storage folder
- * @returns Array of public URLs
+ * Upload multiple images to B2
  */
 export const uploadMultipleImages = async (
   files: Array<{ buffer: Buffer; filename: string }>,
@@ -50,11 +60,9 @@ export const uploadMultipleImages = async (
 ): Promise<string[]> => {
   try {
     const uploadPromises = files.map((file) =>
-      uploadImageToCloudinary(file.buffer, file.filename, folder)
+      uploadImageToB2(file.buffer, file.filename, folder)
     );
-    
-    const urls = await Promise.all(uploadPromises);
-    return urls;
+    return await Promise.all(uploadPromises);
   } catch (error) {
     console.error('Error uploading multiple images:', error);
     throw new Error('Failed to upload images');
@@ -62,43 +70,43 @@ export const uploadMultipleImages = async (
 };
 
 /**
- * Delete image from Cloudinary
- * @param imageUrl - Public URL of the image
+ * Extract the B2 object key from a public URL
  */
-export const deleteImageFromCloudinary = async (imageUrl: string): Promise<void> => {
+function getKeyFromUrl(imageUrl: string): string | null {
+  if (!B2_PUBLIC_URL || !imageUrl.startsWith(B2_PUBLIC_URL)) return null;
+  return imageUrl.slice(B2_PUBLIC_URL.length + 1); // +1 for the trailing slash
+}
+
+/**
+ * Delete image from B2 (deletes both original and thumbnail)
+ */
+export const deleteImageFromB2 = async (imageUrl: string): Promise<void> => {
   try {
-    // Extract public_id from Cloudinary URL
-    // Example: https://res.cloudinary.com/cloud-name/image/upload/v1234567890/balwinder/products/uuid-filename.jpg
-    const urlParts = imageUrl.split('/');
-    const uploadIndex = urlParts.indexOf('upload');
-    
-    if (uploadIndex === -1) {
-      console.warn('Invalid Cloudinary URL format');
+    const key = getKeyFromUrl(imageUrl);
+    if (!key) {
+      console.warn('Invalid B2 URL format:', imageUrl);
       return;
     }
-    
-    // Get everything after 'upload/vXXXXXXXX/'
-    const publicIdWithExtension = urlParts.slice(uploadIndex + 2).join('/');
-    // Remove file extension
-    const publicId = publicIdWithExtension.substring(0, publicIdWithExtension.lastIndexOf('.')) || publicIdWithExtension;
-    
-    await cloudinary.uploader.destroy(publicId);
+
+    // Derive thumbnail key: file.webp -> file-thumb.webp
+    const thumbKey = key.replace(/\.webp$/, '-thumb.webp');
+
+    await Promise.all([
+      s3Client.send(new DeleteObjectCommand({ Bucket: B2_BUCKET_NAME, Key: key })),
+      s3Client.send(new DeleteObjectCommand({ Bucket: B2_BUCKET_NAME, Key: thumbKey })),
+    ]);
   } catch (error) {
-    console.error('Error deleting image from Cloudinary:', error);
-    // Don't throw error - image might already be deleted
+    console.error('Error deleting image from B2:', error);
   }
 };
 
 /**
- * Delete multiple images from Cloudinary
- * @param imageUrls - Array of public URLs
+ * Delete multiple images from B2
  */
 export const deleteMultipleImages = async (imageUrls: string[]): Promise<void> => {
   try {
-    const deletePromises = imageUrls.map((url) => deleteImageFromCloudinary(url));
-    await Promise.all(deletePromises);
+    await Promise.all(imageUrls.map((url) => deleteImageFromB2(url)));
   } catch (error) {
     console.error('Error deleting multiple images:', error);
   }
 };
-
