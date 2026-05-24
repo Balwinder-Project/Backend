@@ -14,7 +14,10 @@ export const uploadImageToB2 = async (
   folder: string = 'products'
 ): Promise<string> => {
   try {
-    const baseName = filename.split('.')[0];
+    const baseName = filename.split('.')[0]
+      .replace(/[^a-zA-Z0-9_-]/g, '_')
+      .replace(/_+/g, '_')
+      .substring(0, 64);
     const key = `balwinder/${folder}/${randomUUID()}-${baseName}`;
 
     // Process original: convert to webp with auto quality
