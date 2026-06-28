@@ -17,9 +17,9 @@ export const validateProductData = (isUpdate: boolean = false) => {
       }
     }
 
-    // Validate description (optional)
-    if (description && description.length > 2000) {
-      errors.push('Description cannot exceed 2000 characters');
+    // Validate description (optional) — allows rich-text HTML, so a larger limit
+    if (description && description.length > 20000) {
+      errors.push('Description cannot exceed 20000 characters');
     }
 
     // Validate price

@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { ProductService } from '../services/product.service';
 import { CatalogueQcService } from '../services/catalogueQc.service';
+import { MockupService } from '../services/mockup.service';
 import { ADMIN_ROLE_CLAIM, hasAdminPermission } from '../constants/adminRoles';
 import { transformProductImages } from '../utils/imageTransform';
 
@@ -65,9 +66,11 @@ export const createProduct = async (req: Request, res: Response): Promise<void> 
     const {
       name,
       description,
+      features,
       price,
       sku,
       images,
+      holographicImages,
       category,
       subCategories,
       tags,
@@ -86,9 +89,11 @@ export const createProduct = async (req: Request, res: Response): Promise<void> 
     const productData = {
       name,
       description,
+      features: features || [],
       price,
       sku,
       images: images || [],
+      holographicImages: holographicImages || [],
       category,
       subCategories: subCategories || [],
       tags: tags || [],
@@ -228,9 +233,11 @@ export const updateProduct = async (req: Request, res: Response): Promise<void> 
     const {
       name,
       description,
+      features,
       price,
       sku,
       images,
+      holographicImages,
       category,
       subCategories,
       tags,
@@ -249,6 +256,8 @@ export const updateProduct = async (req: Request, res: Response): Promise<void> 
     const updateData: any = {};
     if (name) updateData.name = name;
     if (description !== undefined) updateData.description = description;
+    if (features !== undefined) updateData.features = features || [];
+    if (holographicImages !== undefined) updateData.holographicImages = holographicImages || [];
     if (price !== undefined) updateData.price = price;
     if (sku) updateData.sku = sku;
     if (images !== undefined) updateData.images = images;
@@ -295,6 +304,46 @@ export const updateProduct = async (req: Request, res: Response): Promise<void> 
     console.error('Error updating product:', error);
 
     sendMutationError(res, error, 'Failed to update product');
+  }
+};
+
+/**
+ * Generate mockups for a product from its design image + matching templates.
+ * POST /api/v1/products/:id/mockups/generate
+ *
+ * OWNER: applies the new image set directly.
+ * Non-OWNER: routes the resulting image change through QC as a product update.
+ */
+export const generateProductMockups = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const result = await MockupService.generateForProduct(id);
+    const changes = { images: result.images, mockupImages: result.mockupImages };
+
+    if (!hasAdminPermission(req.user, 'OWNER')) {
+      const request = await CatalogueQcService.createRequest('product', 'update', changes, getActor(req), id);
+      res.status(202).json({
+        success: true,
+        message: `Generated ${result.mockupImages.length} mockup(s), submitted for QC approval`,
+        data: { request, generated: result.mockupImages },
+      });
+      return;
+    }
+
+    const product = await ProductService.updateProduct(id, changes as any);
+    res.status(200).json({
+      success: true,
+      message: `Generated ${result.mockupImages.length} mockup(s)`,
+      data: product,
+    });
+  } catch (error: any) {
+    console.error('Error generating mockups:', error);
+    if (error.message === 'product not found') {
+      res.status(404).json({ success: false, message: 'Product not found' });
+      return;
+    }
+    // Design missing / no matching templates / ImageMagick unavailable are client-actionable.
+    res.status(400).json({ success: false, message: error.message || 'Failed to generate mockups' });
   }
 };
 

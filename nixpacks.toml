@@ -1,0 +1,6 @@
+# Nixpacks build config for Coolify.
+# Adds the ImageMagick CLI (`convert`/`magick`) to the build image so the mockup
+# service can render perspective/curved mockups. Flat mockups work without it.
+# `aptPkgs` is additive — it does not replace Nixpacks' auto-detected Node setup.
+[phases.setup]
+aptPkgs = ["imagemagick"]

@@ -10,12 +10,22 @@ export interface IRetailerPricing {
   slabs: IPricingSlab[];
 }
 
+export interface IMockupImage {
+  templateId: mongoose.Types.ObjectId;
+  url: string;
+  generatedAt: Date;
+}
+
 export interface IProduct extends Document {
   name: string;
   description?: string;
+  features: string[];
   price: number;
   sku: string;
   images: string[];
+  holographicImages: string[];
+  designImage?: string;
+  mockupImages: IMockupImage[];
   category: mongoose.Types.ObjectId;
   subCategories: mongoose.Types.ObjectId[];
   tags: mongoose.Types.ObjectId[];
@@ -45,7 +55,11 @@ const productSchema = new Schema<IProduct>(
     description: {
       type: String,
       trim: true,
-      maxlength: [2000, 'Description cannot exceed 2000 characters'],
+      maxlength: [20000, 'Description cannot exceed 20000 characters'],
+    },
+    features: {
+      type: [String],
+      default: [],
     },
     price: {
       type: Number,
@@ -61,6 +75,24 @@ const productSchema = new Schema<IProduct>(
     },
     images: {
       type: [String],
+      default: [],
+    },
+    holographicImages: {
+      type: [String],
+      default: [],
+    },
+    designImage: {
+      type: String,
+      default: '',
+    },
+    mockupImages: {
+      type: [
+        {
+          templateId: { type: Schema.Types.ObjectId, ref: 'MockupTemplate' },
+          url: { type: String, required: true },
+          generatedAt: { type: Date, default: Date.now },
+        },
+      ],
       default: [],
     },
     category: {

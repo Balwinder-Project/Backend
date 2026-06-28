@@ -13,6 +13,7 @@ import addressRoutes from './address.routes';
 import orderRoutes from './order.routes';
 import qcRoutes from './qc.routes';
 import heroSlideRoutes from './heroSlide.routes';
+import mockupTemplateRoutes from './mockupTemplate.routes';
 
 const router = Router();
 
@@ -34,6 +35,7 @@ router.use(`${API_VERSION}/addresses`, addressRoutes);
 router.use(`${API_VERSION}/orders`, orderRoutes);
 router.use(`${API_VERSION}/qc`, qcRoutes);
 router.use(`${API_VERSION}/hero-slides`, heroSlideRoutes);
+router.use(`${API_VERSION}/mockup-templates`, mockupTemplateRoutes);
 
 // API info endpoint
 router.get('/', (_req, res) => {
@@ -55,7 +57,8 @@ router.get('/', (_req, res) => {
       addresses: `${API_VERSION}/addresses`,
       orders: `${API_VERSION}/orders`,
       qc: `${API_VERSION}/qc`,
-      heroSlides: `${API_VERSION}/hero-slides`
+      heroSlides: `${API_VERSION}/hero-slides`,
+      mockupTemplates: `${API_VERSION}/mockup-templates`
     }
   });
 });

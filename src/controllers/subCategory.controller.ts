@@ -72,7 +72,7 @@ const sendSubCategoryMutationError = (res: Response, error: any, fallbackMessage
 
 export const createSubCategory = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { name, description, category, isActive, fieldTemplate, parent } = req.body;
+    const { name, description, category, isActive, isHolographic, fieldTemplate, parent } = req.body;
 
     const subCategoryData = {
       name,
@@ -81,6 +81,7 @@ export const createSubCategory = async (req: Request, res: Response): Promise<vo
       category,
       parent: parent || null,
       isActive: isActive !== undefined ? isActive : true,
+      isHolographic: isHolographic !== undefined ? isHolographic : false,
       fieldTemplate: fieldTemplate || null,
     };
 
@@ -199,7 +200,7 @@ export const getSubCategoryBySlugs = async (req: Request, res: Response): Promis
 export const updateSubCategory = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const { name, description, category, isActive, fieldTemplate, parent } = req.body;
+    const { name, description, category, isActive, isHolographic, fieldTemplate, parent } = req.body;
 
     const updateData: any = {};
     if (name) updateData.name = name;
@@ -207,6 +208,7 @@ export const updateSubCategory = async (req: Request, res: Response): Promise<vo
     if (category !== undefined) updateData.category = category;
     if (parent !== undefined) updateData.parent = parent || null;
     if (isActive !== undefined) updateData.isActive = isActive;
+    if (isHolographic !== undefined) updateData.isHolographic = isHolographic;
     if (fieldTemplate !== undefined) updateData.fieldTemplate = fieldTemplate;
     if (req.body.slug) updateData.slug = req.body.slug;
 

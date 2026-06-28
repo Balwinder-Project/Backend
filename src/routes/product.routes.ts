@@ -4,7 +4,8 @@ import {
   getAllProducts,
   getProductById,
   updateProduct,
-  deleteProduct
+  deleteProduct,
+  generateProductMockups
 } from '../controllers/product.controller';
 import { authenticateUser, optionalAuth, requireAnyAdminPermission } from '../middleware/auth.middleware';
 import { validateProductData, validateObjectId } from '../validators/product.validator';
@@ -45,6 +46,13 @@ router.put('/:id', authenticateUser, requireAnyAdminPermission(['PRODUCT_EDITOR'
  * Requires admin authentication
  */
 router.delete('/:id', authenticateUser, requireAnyAdminPermission(['PRODUCT_EDITOR', 'OWNER']), validateObjectId, deleteProduct);
+
+/**
+ * POST /api/v1/products/:id/mockups/generate
+ * Generate mockups from the product's design image + matching templates.
+ * Requires admin authentication
+ */
+router.post('/:id/mockups/generate', authenticateUser, requireAnyAdminPermission(['PRODUCT_EDITOR', 'OWNER']), validateObjectId, generateProductMockups);
 
 export default router;
 
