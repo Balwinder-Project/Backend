@@ -10,7 +10,8 @@
     "lint": "eslint . --ext .ts",
     "lint:fix": "eslint . --ext .ts --fix",
     "migrate:wallets": "ts-node src/scripts/createMissingWallets.ts",
-    "seed:hero-slides": "ts-node src/scripts/seedHeroSlides.ts"
+    "seed:hero-slides": "ts-node src/scripts/seedHeroSlides.ts",
+    "backfill:watermarks": "ts-node src/scripts/backfillWatermarks.ts"
   },
   "keywords": [],
   "author": "",

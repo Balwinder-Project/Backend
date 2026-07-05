@@ -2,10 +2,14 @@ import { PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { s3Client, B2_BUCKET_NAME, B2_PUBLIC_URL } from '../config/b2';
 import { randomUUID } from 'crypto';
 import sharp from 'sharp';
+import { applyWatermark } from './watermark';
 
 /**
  * Upload image to Backblaze B2
- * Uploads both original (webp) and thumbnail (400x400 webp) variants.
+ * Uploads three variants:
+ *   - original       (file.webp)        served to admins
+ *   - thumbnail      (file-thumb.webp)  400x400, for listings/cards
+ *   - watermarked    (file-wm.webp)     served to the public on detail pages
  * @returns Public URL of the original image
  */
 export const uploadImageToB2 = async (
@@ -31,7 +35,10 @@ export const uploadImageToB2 = async (
       .webp({ quality: 60 })
       .toBuffer();
 
-    // Upload both variants in parallel
+    // Process watermarked variant: brand logo composited over the full-size image
+    const watermarkedBuffer = await applyWatermark(fileBuffer);
+
+    // Upload all three variants in parallel
     await Promise.all([
       s3Client.send(new PutObjectCommand({
         Bucket: B2_BUCKET_NAME,
@@ -43,6 +50,12 @@ export const uploadImageToB2 = async (
         Bucket: B2_BUCKET_NAME,
         Key: `${key}-thumb.webp`,
         Body: thumbBuffer,
+        ContentType: 'image/webp',
+      })),
+      s3Client.send(new PutObjectCommand({
+        Bucket: B2_BUCKET_NAME,
+        Key: `${key}-wm.webp`,
+        Body: watermarkedBuffer,
         ContentType: 'image/webp',
       })),
     ]);
@@ -91,12 +104,14 @@ export const deleteImageFromB2 = async (imageUrl: string): Promise<void> => {
       return;
     }
 
-    // Derive thumbnail key: file.webp -> file-thumb.webp
+    // Derive sibling variant keys: file.webp -> file-thumb.webp / file-wm.webp
     const thumbKey = key.replace(/\.webp$/, '-thumb.webp');
+    const watermarkKey = key.replace(/\.webp$/, '-wm.webp');
 
     await Promise.all([
       s3Client.send(new DeleteObjectCommand({ Bucket: B2_BUCKET_NAME, Key: key })),
       s3Client.send(new DeleteObjectCommand({ Bucket: B2_BUCKET_NAME, Key: thumbKey })),
+      s3Client.send(new DeleteObjectCommand({ Bucket: B2_BUCKET_NAME, Key: watermarkKey })),
     ]);
   } catch (error) {
     console.error('Error deleting image from B2:', error);

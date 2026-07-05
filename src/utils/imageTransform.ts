@@ -7,11 +7,12 @@ export function getThumbnailUrl(url: string): string {
 }
 
 /**
- * Get high-res URL (for product detail page)
- * With B2, the original is served as-is (watermark applied at upload time if needed)
+ * Get watermarked high-res URL (for the public product detail page)
+ * Derives the watermarked variant from the original: file.webp -> file-wm.webp
+ * The watermarked variant is generated at upload time (see imageUpload.ts).
  */
 export function getWatermarkedUrl(url: string): string {
-  return url;
+  return url.replace(/\.webp$/, '-wm.webp');
 }
 
 /**
