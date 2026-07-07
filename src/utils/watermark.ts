@@ -15,8 +15,8 @@ import path from 'path';
  */
 const WATERMARK_PATH = path.join(process.cwd(), 'assets', 'watermark.png');
 
-// Brand orange for the mark.
-const WATERMARK_COLOR = { r: 245, g: 135, b: 31 };
+// White mark.
+const WATERMARK_COLOR = { r: 255, g: 255, b: 255 };
 // Opacity of the mark (0..1).
 const WATERMARK_OPACITY = 0.65;
 // Each logo tile spans this fraction of the base image width.
