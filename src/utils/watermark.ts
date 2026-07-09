@@ -4,9 +4,8 @@ import path from 'path';
 /**
  * Watermarking for public product images.
  *
- * A full-opacity white silhouette of the brand logo lives at
- * `backend/assets/watermark.png` (shape only — it is re-tinted to the brand
- * orange and given a target opacity at runtime). It is resolved relative to
+ * The brand logo lives at `backend/assets/watermark.png` (a transparent PNG —
+ * its own colours/outline are preserved). It is resolved relative to
  * `process.cwd()` (the backend/ directory in both `npm run dev` and
  * `npm start`) so it survives the `tsc` build without being copied into `dist/`.
  *
@@ -15,8 +14,6 @@ import path from 'path';
  */
 const WATERMARK_PATH = path.join(process.cwd(), 'assets', 'watermark.png');
 
-// White mark.
-const WATERMARK_COLOR = { r: 255, g: 255, b: 255 };
 // Opacity of the mark (0..1).
 const WATERMARK_OPACITY = 0.65;
 // Each logo tile spans this fraction of the base image width.
@@ -30,7 +27,8 @@ const ANGLE_DEG = -30;
 const TRANSPARENT = { r: 0, g: 0, b: 0, alpha: 0 };
 
 /**
- * Build one orange, semi-transparent logo tile sized to the base width.
+ * Build one logo tile (colours preserved) sized to the base width, faded to the
+ * target opacity.
  * @returns tile PNG buffer plus its pixel dimensions.
  */
 const buildTile = async (
@@ -38,21 +36,20 @@ const buildTile = async (
 ): Promise<{ buffer: Buffer; width: number; height: number }> => {
   const tileWidth = Math.max(1, Math.round(baseWidth * TILE_WIDTH_RATIO));
 
-  // Take the silhouette's alpha, scale it to the target opacity.
-  const resized = sharp(WATERMARK_PATH).resize({ width: tileWidth }).ensureAlpha();
-  const alpha = await resized
-    .clone()
-    .extractChannel(3)
-    .linear(WATERMARK_OPACITY, 0)
-    .png()
-    .toBuffer();
-  const { width = tileWidth, height = tileWidth } = await sharp(alpha).metadata();
+  const resized = await sharp(WATERMARK_PATH).resize({ width: tileWidth }).ensureAlpha().png().toBuffer();
+  const { width = tileWidth, height = tileWidth } = await sharp(resized).metadata();
 
-  // Paint the shape in brand orange using that alpha.
-  const buffer = await sharp({
-    create: { width, height, channels: 3, background: WATERMARK_COLOR },
-  })
-    .joinChannel(alpha)
+  // Fade to target opacity by multiplying the logo's alpha with a uniform mask
+  // (dest-in keeps the logo's RGB, scaling only its alpha).
+  const buffer = await sharp(resized)
+    .composite([
+      {
+        input: Buffer.from([255, 255, 255, Math.round(255 * WATERMARK_OPACITY)]),
+        raw: { width: 1, height: 1, channels: 4 },
+        tile: true,
+        blend: 'dest-in',
+      },
+    ])
     .png()
     .toBuffer();
 

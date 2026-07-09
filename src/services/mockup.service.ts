@@ -1,6 +1,10 @@
 import sharp from 'sharp';
 import mongoose from 'mongoose';
-import MockupTemplate, { IMockupTemplate } from '../models/mockupTemplate.model';
+import MockupTemplate, {
+  IMockupTemplate,
+  IMockupPlacement,
+  IMockupCorners,
+} from '../models/mockupTemplate.model';
 import Product, { IProduct } from '../models/product.model';
 import SubCategory from '../models/subCategory.model';
 import { uploadImageToB2 } from '../utils/imageUpload';
@@ -31,6 +35,50 @@ const validateTemplateRelationships = async (payload: Record<string, any>): Prom
       throw new Error('One or more subcategories were not found');
     }
   }
+};
+
+/**
+ * Resolve the flat placement areas for a template, falling back to the legacy
+ * single `placement` field (and finally a sensible default) so older templates
+ * keep rendering after the multi-area migration.
+ */
+const resolvePlacements = (template: IMockupTemplate): IMockupPlacement[] => {
+  if (Array.isArray(template.placements) && template.placements.length > 0) {
+    return template.placements;
+  }
+  if (template.placement) return [template.placement];
+  return [];
+};
+
+/** Resolve the perspective/curved corner sets, falling back to legacy `corners`. */
+const resolveCornersList = (template: IMockupTemplate): IMockupCorners[] => {
+  if (Array.isArray(template.cornersList) && template.cornersList.length > 0) {
+    return template.cornersList;
+  }
+  if (template.corners) return [template.corners];
+  return [];
+};
+
+/**
+ * Build a default cylindrical displacement map so `curved` mode works without
+ * the admin hand-crafting one. Models a vertical cylinder (curving left↔right):
+ * the red channel encodes a smooth horizontal barrel profile (X displacement)
+ * while green/blue stay neutral (128) so vertical position is untouched.
+ * A 256×1 strip is enough — magick resizes it to the base dimensions.
+ */
+const buildCylindricalDisplacementMap = async (): Promise<Buffer> => {
+  const cols = 256;
+  const channels = 3;
+  const strip = Buffer.alloc(cols * channels);
+  for (let x = 0; x < cols; x++) {
+    const u = (x / (cols - 1)) * 2 - 1; // -1 (left) .. 1 (right)
+    const profile = Math.round(128 + 127 * Math.sin((u * Math.PI) / 2));
+    const i = x * channels;
+    strip[i] = profile; // R → horizontal displacement
+    strip[i + 1] = 128; // G → vertical (neutral)
+    strip[i + 2] = 128; // B
+  }
+  return sharp(strip, { raw: { width: cols, height: 1, channels } }).png().toBuffer();
 };
 
 /** Reduce a processed sticker PNG's alpha uniformly to apply opacity < 1. */
@@ -97,26 +145,33 @@ export class MockupService {
     const composites: sharp.OverlayOptions[] = [];
 
     if (template.renderMode === 'flat') {
-      const p = template.placement || ({} as any);
-      const slotW = Math.max(1, Math.round((W * (p.width ?? 50)) / 100));
-      const slotH = Math.max(1, Math.round((H * (p.height ?? 50)) / 100));
-
-      let sticker = sharp(designBuffer).ensureAlpha().resize(slotW, slotH, {
-        fit: 'inside',
-        background: { r: 0, g: 0, b: 0, alpha: 0 },
-      });
-      if (p.rotation) {
-        sticker = sticker.rotate(p.rotation, { background: { r: 0, g: 0, b: 0, alpha: 0 } });
-      }
-      let stickerBuf = await sticker.png().toBuffer();
-      if (typeof p.opacity === 'number' && p.opacity < 1) {
-        stickerBuf = await applyOpacity(stickerBuf, p.opacity);
+      const placements = resolvePlacements(template);
+      if (!placements.length) {
+        throw new Error('Flat templates require at least one placement area');
       }
 
-      const sMeta = await sharp(stickerBuf).metadata();
-      const left = Math.round((W * (p.x ?? 25)) / 100 + (slotW - (sMeta.width || slotW)) / 2);
-      const top = Math.round((H * (p.y ?? 25)) / 100 + (slotH - (sMeta.height || slotH)) / 2);
-      composites.push({ input: stickerBuf, left, top, blend: (p.blendMode || 'over') as sharp.Blend });
+      // Composite the sticker into every configured placement area.
+      for (const p of placements) {
+        const slotW = Math.max(1, Math.round((W * (p.width ?? 50)) / 100));
+        const slotH = Math.max(1, Math.round((H * (p.height ?? 50)) / 100));
+
+        let sticker = sharp(designBuffer).ensureAlpha().resize(slotW, slotH, {
+          fit: 'inside',
+          background: { r: 0, g: 0, b: 0, alpha: 0 },
+        });
+        if (p.rotation) {
+          sticker = sticker.rotate(p.rotation, { background: { r: 0, g: 0, b: 0, alpha: 0 } });
+        }
+        let stickerBuf = await sticker.png().toBuffer();
+        if (typeof p.opacity === 'number' && p.opacity < 1) {
+          stickerBuf = await applyOpacity(stickerBuf, p.opacity);
+        }
+
+        const sMeta = await sharp(stickerBuf).metadata();
+        const left = Math.round((W * (p.x ?? 25)) / 100 + (slotW - (sMeta.width || slotW)) / 2);
+        const top = Math.round((H * (p.y ?? 25)) / 100 + (slotH - (sMeta.height || slotH)) / 2);
+        composites.push({ input: stickerBuf, left, top, blend: (p.blendMode || 'over') as sharp.Blend });
+      }
     } else {
       // perspective / curved require ImageMagick
       if (!(await isMagickAvailable())) {
@@ -124,28 +179,37 @@ export class MockupService {
           'ImageMagick is required for perspective/curved mockups but is not installed on the server'
         );
       }
-      if (!template.corners) {
+      const cornersList = resolveCornersList(template);
+      if (!cornersList.length) {
         throw new Error('Perspective/curved templates require four corner points');
       }
 
-      let layerBuf: Buffer;
+      let dispBuffer: Buffer | undefined;
       if (template.renderMode === 'curved') {
-        if (!template.displacementMap) {
-          throw new Error('Curved templates require a displacement map');
-        }
-        const dispBuffer = await downloadToBuffer(template.displacementMap);
-        layerBuf = await renderCurvedLayer(
-          designBuffer,
-          template.corners,
-          W,
-          H,
-          dispBuffer,
-          template.displacementStrength ?? 12
-        );
-      } else {
-        layerBuf = await renderPerspectiveLayer(designBuffer, template.corners, W, H);
+        // Use the uploaded map when present; otherwise fall back to a built-in
+        // cylindrical map so curved mode works with no extra setup.
+        dispBuffer = template.displacementMap
+          ? await downloadToBuffer(template.displacementMap)
+          : await buildCylindricalDisplacementMap();
       }
-      composites.push({ input: layerBuf, left: 0, top: 0, blend: 'over' });
+
+      // Warp the sticker onto every configured surface.
+      for (const corners of cornersList) {
+        let layerBuf: Buffer;
+        if (template.renderMode === 'curved') {
+          layerBuf = await renderCurvedLayer(
+            designBuffer,
+            corners,
+            W,
+            H,
+            dispBuffer as Buffer,
+            template.displacementStrength ?? 12
+          );
+        } else {
+          layerBuf = await renderPerspectiveLayer(designBuffer, corners, W, H);
+        }
+        composites.push({ input: layerBuf, left: 0, top: 0, blend: 'over' });
+      }
     }
 
     // Optional lighting/shadow overlay for realism.

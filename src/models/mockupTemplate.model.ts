@@ -34,8 +34,13 @@ export interface IMockupTemplate extends Document {
   baseWidth?: number;
   baseHeight?: number;
   renderMode: MockupRenderMode;
+  /** @deprecated single-area fields kept for backward compatibility; use placements/cornersList. */
   placement?: IMockupPlacement;
   corners?: IMockupCorners;
+  /** One flat placement box per area the sticker should appear in. */
+  placements?: IMockupPlacement[];
+  /** One set of four corner points per area (perspective/curved). */
+  cornersList?: IMockupCorners[];
   displacementMap?: string;
   displacementStrength: number;
   lightingMap?: string;
@@ -92,6 +97,8 @@ const mockupTemplateSchema = new Schema<IMockupTemplate>(
     },
     placement: { type: placementSchema, default: () => ({}) },
     corners: { type: cornersSchema, default: undefined },
+    placements: { type: [placementSchema], default: undefined },
+    cornersList: { type: [cornersSchema], default: undefined },
     displacementMap: { type: String },
     displacementStrength: { type: Number, default: 12, min: 0 },
     lightingMap: { type: String },

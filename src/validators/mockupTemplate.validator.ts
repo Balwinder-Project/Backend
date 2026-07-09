@@ -4,8 +4,11 @@ const RENDER_MODES = ['flat', 'perspective', 'curved'];
 
 export const validateMockupTemplateData = (isUpdate: boolean = false) => {
   return (req: Request, res: Response, next: NextFunction): void => {
-    const { name, baseImage, renderMode, corners, subCategories } = req.body;
+    const { name, baseImage, renderMode, corners, cornersList, subCategories } = req.body;
     const errors: string[] = [];
+
+    const isValidCorners = (c: any): boolean =>
+      !!c && ['tl', 'tr', 'br', 'bl'].every((k) => Array.isArray(c[k]) && c[k].length === 2);
 
     if (!isUpdate || name !== undefined) {
       if (!name && !isUpdate) {
@@ -25,13 +28,12 @@ export const validateMockupTemplateData = (isUpdate: boolean = false) => {
       errors.push(`renderMode must be one of: ${RENDER_MODES.join(', ')}`);
     }
 
-    // Perspective/curved modes need four corner points.
+    // Perspective/curved modes need at least one valid set of four corner points.
+    // Accept either the multi-area `cornersList` or the legacy single `corners`.
     if (renderMode === 'perspective' || renderMode === 'curved') {
-      const ok =
-        corners &&
-        ['tl', 'tr', 'br', 'bl'].every(
-          (k) => Array.isArray(corners[k]) && corners[k].length === 2
-        );
+      const ok = Array.isArray(cornersList)
+        ? cornersList.length > 0 && cornersList.every(isValidCorners)
+        : isValidCorners(corners);
       if (!ok) {
         errors.push('Perspective/curved templates require corners with tl, tr, br, bl [x, y] points');
       }
