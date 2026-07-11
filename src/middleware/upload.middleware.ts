@@ -30,6 +30,8 @@ export const upload = multer({
 // Middleware for single image upload
 export const uploadSingleImage = upload.single('image');
 
-// Middleware for multiple image uploads (max 5 images)
-export const uploadMultipleImages = upload.array('images', 5);
+// Middleware for multiple image uploads. Keep this >= the admin form's
+// per-uploader limit (currently 8 for product & mockup images) or multer
+// rejects the extra files with a "Unexpected field" error.
+export const uploadMultipleImages = upload.array('images', 8);
 
