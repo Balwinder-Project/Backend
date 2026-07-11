@@ -35,11 +35,7 @@ export const uploadImageToB2 = async (
       .webp({ quality: 60 })
       .toBuffer();
 
-    // Process watermarked variant: brand logo composited over the full-size image
-    const watermarkedBuffer = await applyWatermark(fileBuffer);
-
-    // Upload all three variants in parallel
-    await Promise.all([
+    const uploads = [
       s3Client.send(new PutObjectCommand({
         Bucket: B2_BUCKET_NAME,
         Key: `${key}.webp`,
@@ -52,13 +48,24 @@ export const uploadImageToB2 = async (
         Body: thumbBuffer,
         ContentType: 'image/webp',
       })),
-      s3Client.send(new PutObjectCommand({
-        Bucket: B2_BUCKET_NAME,
-        Key: `${key}-wm.webp`,
-        Body: watermarkedBuffer,
-        ContentType: 'image/webp',
-      })),
-    ]);
+    ];
+
+    // Watermarked variant — skipped for mockup scenes, which are marketing
+    // assets that should stay clean (see getWatermarkedUrl for the read side).
+    const isMockup = folder.startsWith('mockups');
+    if (!isMockup) {
+      const watermarkedBuffer = await applyWatermark(fileBuffer);
+      uploads.push(
+        s3Client.send(new PutObjectCommand({
+          Bucket: B2_BUCKET_NAME,
+          Key: `${key}-wm.webp`,
+          Body: watermarkedBuffer,
+          ContentType: 'image/webp',
+        }))
+      );
+    }
+
+    await Promise.all(uploads);
 
     return `${B2_PUBLIC_URL}/${key}.webp`;
   } catch (error) {

@@ -12,6 +12,9 @@ export function getThumbnailUrl(url: string): string {
  * The watermarked variant is generated at upload time (see imageUpload.ts).
  */
 export function getWatermarkedUrl(url: string): string {
+  // Mockup scenes are marketing assets and are uploaded without a watermarked
+  // variant, so serve them unchanged (rewriting would 404 on a missing -wm file).
+  if (url.includes('/mockups/')) return url;
   return url.replace(/\.webp$/, '-wm.webp');
 }
 
