@@ -14,6 +14,7 @@ import orderRoutes from './order.routes';
 import qcRoutes from './qc.routes';
 import heroSlideRoutes from './heroSlide.routes';
 import mockupTemplateRoutes from './mockupTemplate.routes';
+import dimensionTemplateRoutes from './dimensionTemplate.routes';
 
 const router = Router();
 
@@ -36,6 +37,7 @@ router.use(`${API_VERSION}/orders`, orderRoutes);
 router.use(`${API_VERSION}/qc`, qcRoutes);
 router.use(`${API_VERSION}/hero-slides`, heroSlideRoutes);
 router.use(`${API_VERSION}/mockup-templates`, mockupTemplateRoutes);
+router.use(`${API_VERSION}/dimension-templates`, dimensionTemplateRoutes);
 
 // API info endpoint
 router.get('/', (_req, res) => {
