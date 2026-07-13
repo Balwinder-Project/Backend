@@ -10,6 +10,16 @@ export interface IRetailerPricing {
   slabs: IPricingSlab[];
 }
 
+/**
+ * Per-retailer pricing override. When present for the logged-in retailer, these
+ * slabs replace the product-wide retailerPricing for that retailer only.
+ */
+export interface IRetailerSpecialPricing {
+  retailer: mongoose.Types.ObjectId;
+  minimumOrderQuantity: number;
+  slabs: IPricingSlab[];
+}
+
 export interface IMockupImage {
   templateId: mongoose.Types.ObjectId;
   url: string;
@@ -35,6 +45,7 @@ export interface IProduct extends Document {
   customFields?: any;
   normalUserPricing: IPricingSlab[];
   retailerPricing: IRetailerPricing;
+  retailerSpecialPricing: IRetailerSpecialPricing[];
   weight: number;
   length: number;
   breadth: number;
@@ -149,6 +160,26 @@ const productSchema = new Schema<IProduct>(
         ],
         default: [],
       },
+    },
+    // Per-retailer overrides. Resolved server-side so a retailer only ever sees
+    // their own slabs (see product.controller resolveRetailerPricing).
+    retailerSpecialPricing: {
+      type: [
+        {
+          retailer: { type: Schema.Types.ObjectId, ref: 'Retailer', required: true },
+          minimumOrderQuantity: { type: Number, default: 1, min: [1, 'Minimum order quantity must be at least 1'] },
+          slabs: {
+            type: [
+              {
+                minQuantity: { type: Number, required: true, min: [1, 'Minimum quantity must be at least 1'] },
+                price: { type: Number, required: true, min: [0, 'Price cannot be negative'] },
+              },
+            ],
+            default: [],
+          },
+        },
+      ],
+      default: [],
     },
     weight: {
       type: Number,

@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { ProductService } from '../services/product.service';
 import { CatalogueQcService } from '../services/catalogueQc.service';
 import { MockupService } from '../services/mockup.service';
+import { RetailerService } from '../services/retailer.service';
 import { ADMIN_ROLE_CLAIM, hasAdminPermission } from '../constants/adminRoles';
 import { transformProductImages } from '../utils/imageTransform';
 
@@ -10,6 +11,40 @@ const parseBooleanQuery = (value: unknown): boolean | undefined => {
   if (value === 'true') return true;
   if (value === 'false') return false;
   return undefined;
+};
+
+/**
+ * Resolve per-retailer pricing for a public (non-admin) product response.
+ * If the requesting retailer has a special-pricing entry, its slabs replace the
+ * product-wide retailerPricing. The full retailerSpecialPricing array is always
+ * stripped so no retailer can see another retailer's negotiated prices.
+ * @param obj  A product plain object (post toJSON).
+ * @param retailerId  The requesting retailer's _id, or null for guests/customers.
+ */
+const resolveRetailerPricing = (obj: any, retailerId: string | null): any => {
+  const special = Array.isArray(obj.retailerSpecialPricing) ? obj.retailerSpecialPricing : [];
+  if (retailerId) {
+    const match = special.find((s: any) => String(s.retailer) === String(retailerId));
+    if (match && Array.isArray(match.slabs) && match.slabs.length > 0) {
+      obj.retailerPricing = {
+        minimumOrderQuantity: match.minimumOrderQuantity ?? 1,
+        slabs: match.slabs,
+      };
+    }
+  }
+  delete obj.retailerSpecialPricing;
+  return obj;
+};
+
+/** Look up the requesting user's retailer _id (null if they aren't a retailer). */
+const getRequestingRetailerId = async (req: Request): Promise<string | null> => {
+  if (!req.user?.uid) return null;
+  try {
+    const retailer = await RetailerService.getRetailerByFirebaseUid(req.user.uid);
+    return retailer ? String(retailer._id) : null;
+  } catch {
+    return null;
+  }
 };
 
 const getActor = (req: Request) => ({
@@ -80,6 +115,7 @@ export const createProduct = async (req: Request, res: Response): Promise<void> 
       customFields,
       normalUserPricing,
       retailerPricing,
+      retailerSpecialPricing,
       weight,
       length,
       breadth,
@@ -103,6 +139,7 @@ export const createProduct = async (req: Request, res: Response): Promise<void> 
       customFields: customFields || null,
       normalUserPricing: normalUserPricing || [],
       retailerPricing: retailerPricing || { minimumOrderQuantity: 1, slabs: [] },
+      retailerSpecialPricing: retailerSpecialPricing || [],
       weight: weight !== undefined ? weight : 0.5,
       length: length !== undefined ? length : 10,
       breadth: breadth !== undefined ? breadth : 10,
@@ -151,13 +188,17 @@ export const getAllProducts = async (req: Request, res: Response): Promise<void>
     const result = await ProductService.getAllProducts(page, limit, search, category, subCategory, tags, featured, active);
 
     const isAdmin = req.user?.role === ADMIN_ROLE_CLAIM;
-    const products = isAdmin
-      ? result.products
-      : result.products.map((p: any) => {
-          const obj = typeof p.toJSON === 'function' ? p.toJSON() : { ...p };
-          obj.images = transformProductImages(obj.images || [], 'thumbnail');
-          return obj;
-        });
+    let products;
+    if (isAdmin) {
+      products = result.products;
+    } else {
+      const retailerId = await getRequestingRetailerId(req);
+      products = result.products.map((p: any) => {
+        const obj = typeof p.toJSON === 'function' ? p.toJSON() : { ...p };
+        obj.images = transformProductImages(obj.images || [], 'thumbnail');
+        return resolveRetailerPricing(obj, retailerId);
+      });
+    }
 
     res.status(200).json({
       success: true,
@@ -208,6 +249,8 @@ export const getProductById = async (req: Request, res: Response): Promise<void>
 
     const productObj: any = typeof (product as any).toJSON === 'function' ? (product as any).toJSON() : { ...product };
     productObj.images = transformProductImages(productObj.images || [], 'watermarked');
+    const retailerId = await getRequestingRetailerId(req);
+    resolveRetailerPricing(productObj, retailerId);
 
     res.status(200).json({
       success: true,
@@ -247,6 +290,7 @@ export const updateProduct = async (req: Request, res: Response): Promise<void> 
       customFields,
       normalUserPricing,
       retailerPricing,
+      retailerSpecialPricing,
       weight,
       length,
       breadth,
@@ -270,6 +314,7 @@ export const updateProduct = async (req: Request, res: Response): Promise<void> 
     if (customFields !== undefined) updateData.customFields = customFields;
     if (normalUserPricing !== undefined) updateData.normalUserPricing = normalUserPricing;
     if (retailerPricing !== undefined) updateData.retailerPricing = retailerPricing;
+    if (retailerSpecialPricing !== undefined) updateData.retailerSpecialPricing = retailerSpecialPricing;
     if (weight !== undefined) updateData.weight = weight;
     if (length !== undefined) updateData.length = length;
     if (breadth !== undefined) updateData.breadth = breadth;
