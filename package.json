@@ -11,7 +11,8 @@
     "lint:fix": "eslint . --ext .ts --fix",
     "migrate:wallets": "ts-node src/scripts/createMissingWallets.ts",
     "seed:hero-slides": "ts-node src/scripts/seedHeroSlides.ts",
-    "backfill:watermarks": "ts-node src/scripts/backfillWatermarks.ts"
+    "backfill:watermarks": "ts-node src/scripts/backfillWatermarks.ts",
+    "clean:mockup-watermarks": "ts-node src/scripts/cleanMockupWatermarks.ts"
   },
   "keywords": [],
   "author": "",
