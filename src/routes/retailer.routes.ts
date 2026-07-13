@@ -4,14 +4,23 @@ import {
   getAllRetailers,
   getRetailerById,
   updateRetailer,
-  deleteRetailer
+  deleteRetailer,
+  getMyRetailerStatus
 } from '../controllers/retailer.controller';
 import { authenticateUser, requireAdmin } from '../middleware/auth.middleware';
 import { validateRetailerData, validateObjectId } from '../validators/retailer.validator';
 
 const router = Router();
 
-// All retailer routes require admin authentication
+/**
+ * GET /api/retailers/me
+ * Returns whether the logged-in user is a retailer. Any authenticated user
+ * (not just admins) can call this — used by the storefront to resolve role.
+ * Declared before the admin guard below.
+ */
+router.get('/me', authenticateUser, getMyRetailerStatus);
+
+// All remaining retailer routes require admin authentication
 router.use(authenticateUser, requireAdmin);
 
 /**

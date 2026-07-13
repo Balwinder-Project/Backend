@@ -2,6 +2,26 @@ import { Request, Response } from 'express';
 import { RetailerService } from '../services/retailer.service';
 
 /**
+ * Whether the authenticated user is a registered retailer.
+ * Lets the storefront distinguish a retailer from a normal email/password
+ * customer instead of guessing from the Firebase sign-in provider.
+ * GET /api/retailers/me
+ */
+export const getMyRetailerStatus = async (req: Request, res: Response): Promise<void> => {
+  try {
+    if (!req.user?.uid) {
+      res.status(401).json({ success: false, message: 'Unauthorized' });
+      return;
+    }
+    const retailer = await RetailerService.getRetailerByFirebaseUid(req.user.uid);
+    res.json({ success: true, data: { isRetailer: !!retailer, retailer: retailer || null } });
+  } catch (error) {
+    console.error('Error checking retailer status:', error);
+    res.status(500).json({ success: false, message: 'Failed to check retailer status' });
+  }
+};
+
+/**
  * Create a new retailer
  * POST /api/retailers
  */
