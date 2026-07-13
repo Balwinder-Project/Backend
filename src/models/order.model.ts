@@ -41,8 +41,10 @@ export interface IOrder extends Document {
   subtotal: number;
   shippingCharge: number;
   total: number;
-  paymentMethod: 'wallet';
+  paymentMethod: 'wallet' | 'razorpay';
   walletTransactionId?: mongoose.Types.ObjectId;
+  razorpayOrderId?: string;
+  razorpayPaymentId?: string;
   status: OrderStatus;
   shiprocketOrderId?: string;
   shiprocketShipmentId?: string;
@@ -115,13 +117,15 @@ const orderSchema = new Schema<IOrder>(
     total: { type: Number, required: true, min: 0 },
     paymentMethod: {
       type: String,
-      enum: ['wallet'],
+      enum: ['wallet', 'razorpay'],
       default: 'wallet',
     },
     walletTransactionId: {
       type: Schema.Types.ObjectId,
       ref: 'WalletTransaction',
     },
+    razorpayOrderId: { type: String },
+    razorpayPaymentId: { type: String },
     status: {
       type: String,
       enum: Object.values(OrderStatus),

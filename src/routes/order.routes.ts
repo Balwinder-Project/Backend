@@ -2,6 +2,7 @@ import { Router } from 'express';
 import {
   getShippingRates,
   createOrder,
+  createRazorpayCheckoutOrder,
   getUserOrders,
   getOrderById,
   getAllOrdersAdmin,
@@ -22,6 +23,7 @@ router.post('/shiprocket/webhook', shiprocketWebhook);
 // Authenticated routes
 router.post('/shipping-rates', authenticateUser, shippingRatesValidator, validateRequest, getShippingRates);
 router.post('/', authenticateUser, createOrderValidator, validateRequest, createOrder);
+router.post('/razorpay/create-order', authenticateUser, createRazorpayCheckoutOrder);
 
 // Admin — must be before /:id to prevent "admin" being parsed as an ObjectId
 router.get('/admin/all', authenticateUser, requireAdmin, getAllOrdersAdmin);

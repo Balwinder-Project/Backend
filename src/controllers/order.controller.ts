@@ -5,6 +5,7 @@ import Product from '../models/product.model';
 import { OrderService } from '../services/order.service';
 import { WalletService } from '../services/wallet.service';
 import { ShiprocketService } from '../services/shiprocket.service';
+import { RazorpayService } from '../services/razorpay.service';
 import { IEmbeddedAddress, IOrderItem } from '../models/order.model';
 
 const PICKUP_POSTCODE = process.env.SHIPROCKET_PICKUP_POSTCODE || '';
@@ -66,12 +67,20 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
       billingAddress,
       shippingCharge,
       notes,
+      paymentMethod = 'wallet',
+      razorpayOrderId,
+      razorpayPaymentId,
+      razorpaySignature,
     } = req.body as {
       items: Array<{ productId: string; quantity: number; price: number; variant?: Record<string, any> }>;
       shippingAddress: IEmbeddedAddress;
       billingAddress: IEmbeddedAddress;
       shippingCharge: number;
       notes?: string;
+      paymentMethod?: 'wallet' | 'razorpay';
+      razorpayOrderId?: string;
+      razorpayPaymentId?: string;
+      razorpaySignature?: string;
     };
 
     // Enrich items with product name, sku, weight
@@ -94,15 +103,43 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
     const subtotal = orderItems.reduce((sum, i) => sum + i.price * i.quantity, 0);
     const total = subtotal + shippingCharge;
 
-    // 1. Deduct wallet (within session)
-    const { transaction } = await WalletService.recordPurchase(
-      userId,
-      'user',
-      total,
-      `Payment for order`,
-      {},
-      session
-    );
+    // For Razorpay: verify the payment signature AND that the amount actually
+    // paid matches this order's total (prevents paying for a cheaper order then
+    // submitting expensive items with a valid signature).
+    if (paymentMethod === 'razorpay') {
+      const validSignature = RazorpayService.verifyPaymentSignature(
+        razorpayOrderId || '',
+        razorpayPaymentId || '',
+        razorpaySignature || ''
+      );
+      if (!validSignature) {
+        await session.abortTransaction();
+        res.status(400).json({ success: false, message: 'Payment verification failed' });
+        return;
+      }
+      const rzpOrder = await RazorpayService.getOrder(razorpayOrderId || '');
+      const paidPaise = Number(rzpOrder?.amount || 0);
+      if (paidPaise !== Math.round(total * 100)) {
+        await session.abortTransaction();
+        res.status(400).json({ success: false, message: 'Paid amount does not match the order total' });
+        return;
+      }
+    }
+
+    // 1. Take payment: deduct wallet, or (razorpay) rely on the verified
+    //    Razorpay payment above.
+    let walletTransactionId: mongoose.Types.ObjectId | undefined;
+    if (paymentMethod === 'wallet') {
+      const { transaction } = await WalletService.recordPurchase(
+        userId,
+        'user',
+        total,
+        `Payment for order`,
+        {},
+        session
+      );
+      walletTransactionId = transaction._id as mongoose.Types.ObjectId;
+    }
 
     // 2. Create order (within session)
     const order = await OrderService.createOrder(
@@ -115,12 +152,17 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
         shippingCharge,
         total,
         notes,
+        paymentMethod,
+        razorpayOrderId,
+        razorpayPaymentId,
       },
       session
     );
 
-    // Link wallet transaction
-    await order.updateOne({ walletTransactionId: transaction._id }, { session });
+    // Link wallet transaction (wallet payments only)
+    if (walletTransactionId) {
+      await order.updateOne({ walletTransactionId }, { session });
+    }
 
     await session.commitTransaction();
 
@@ -197,6 +239,54 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
     res.status(500).json({ success: false, message: error.message || 'Failed to place order' });
   } finally {
     session.endSession();
+  }
+};
+
+/**
+ * Create a Razorpay order for the current cart so the client can open Razorpay
+ * checkout. The order is only persisted after payment is verified in createOrder.
+ * POST /api/v1/orders/razorpay/create-order
+ */
+export const createRazorpayCheckoutOrder = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = await resolveUserId(req.user!.uid);
+    const { items, shippingCharge = 0 } = req.body as {
+      items: Array<{ price: number; quantity: number }>;
+      shippingCharge?: number;
+    };
+
+    if (!Array.isArray(items) || items.length === 0) {
+      res.status(400).json({ success: false, message: 'No items to pay for' });
+      return;
+    }
+
+    const subtotal = items.reduce((s, i) => s + (Number(i.price) || 0) * (Number(i.quantity) || 0), 0);
+    const total = subtotal + (Number(shippingCharge) || 0);
+    if (total <= 0) {
+      res.status(400).json({ success: false, message: 'Invalid order total' });
+      return;
+    }
+
+    const amountInPaise = Math.round(total * 100);
+    const receipt = `ord_${userId.slice(-8)}_${Math.floor(Date.now() / 1000)}`;
+    const order = await RazorpayService.createOrder(amountInPaise, 'INR', receipt, { userId });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        orderId: order.id,
+        amount: order.amount,
+        currency: order.currency,
+        keyId: process.env.RAZORPAY_KEY_ID,
+      },
+    });
+  } catch (error: any) {
+    console.error('Error creating Razorpay checkout order:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to create payment order',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+    });
   }
 };
 
