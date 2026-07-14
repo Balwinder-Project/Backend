@@ -130,6 +130,25 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
     //    Razorpay payment above.
     let walletTransactionId: mongoose.Types.ObjectId | undefined;
     if (paymentMethod === 'wallet') {
+      // Explicit balance check that reports the actual figures the order sees,
+      // so an insufficient-balance response is unambiguous (and correct even if
+      // the wallet the order reads differs from what the UI shows).
+      const availableBalance = await WalletService.getWalletBalance(userId, 'user');
+      console.log(
+        `[createOrder] wallet check — user=${userId} available=${availableBalance} required=${total}`
+      );
+      if (availableBalance === null || availableBalance < total) {
+        await session.abortTransaction();
+        res.status(400).json({
+          success: false,
+          message: 'Insufficient wallet balance',
+          insufficientBalance: true,
+          available: availableBalance ?? 0,
+          required: total,
+        });
+        return;
+      }
+
       const { transaction } = await WalletService.recordPurchase(
         userId,
         'user',
