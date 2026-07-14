@@ -13,10 +13,11 @@
  * Find the payment/order id in the Razorpay dashboard → Transactions.
  */
 import 'dotenv/config';
+import mongoose from 'mongoose';
 import { connectDatabase, disconnectDatabase } from '../config/database';
 import { RazorpayService } from '../services/razorpay.service';
 import { WalletService } from '../services/wallet.service';
-import WalletTransaction from '../models/walletTransaction.model';
+import WalletTransaction, { TransactionType } from '../models/walletTransaction.model';
 import User from '../models/user.model';
 
 const run = async () => {
@@ -72,13 +73,29 @@ const run = async () => {
     return;
   }
 
-  // 5. Credit the exact captured amount.
+  // 5. Credit the exact captured amount. Done WITHOUT a multi-document
+  //    transaction so it also works on a standalone MongoDB (transactions need
+  //    a replica set). Idempotency is guaranteed by the check above.
   const amountInRupees = payment.amount / 100;
-  const { wallet, transaction } = await WalletService.topUpWallet(userId, 'user', {
+  const wallet = await WalletService.getWalletByOwner(userId, 'user');
+  if (!wallet) {
+    throw new Error(`Wallet not found for user ${userId}.`);
+  }
+
+  const balanceBefore = wallet.balance;
+  const balanceAfter = balanceBefore + amountInRupees;
+  wallet.balance = balanceAfter;
+  await wallet.save();
+
+  const transaction = await WalletTransaction.create({
+    walletId: wallet._id,
+    type: TransactionType.TOP_UP,
     amount: amountInRupees,
+    balanceBefore,
+    balanceAfter,
     description: 'Wallet Top-up via Razorpay (manual reconciliation)',
+    performedBy: new mongoose.Types.ObjectId(userId),
     performedByType: 'user',
-    performedBy: userId,
     metadata: {
       razorpayPaymentId: payment.id,
       razorpayOrderId: payment.order_id,
@@ -86,7 +103,7 @@ const run = async () => {
     },
   });
 
-  console.log(`\n✓ Credited ₹${amountInRupees} to ${user.email}. New balance: ₹${wallet.balance} (transaction ${transaction._id})`);
+  console.log(`\n✓ Credited ₹${amountInRupees} to ${user.email}. Balance ₹${balanceBefore} → ₹${balanceAfter} (transaction ${transaction._id})`);
   await disconnectDatabase();
 };
 
