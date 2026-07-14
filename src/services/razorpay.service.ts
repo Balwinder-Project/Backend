@@ -40,6 +40,16 @@ export class RazorpayService {
         return razorpayInstance.orders.fetch(orderId);
     }
 
+    /** Fetch a single Razorpay payment by id. */
+    static async getPayment(paymentId: string): Promise<any> {
+        return razorpayInstance.payments.fetch(paymentId);
+    }
+
+    /** Fetch all payments made against a Razorpay order. */
+    static async getOrderPayments(orderId: string): Promise<any> {
+        return razorpayInstance.orders.fetchPayments(orderId);
+    }
+
     /**
      * Verify a Razorpay payment signature (HMAC-SHA256 of `orderId|paymentId`
      * with the key secret). Returns true only if the payment is authentic.
