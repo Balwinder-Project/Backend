@@ -6,7 +6,22 @@ import { OrderService } from '../services/order.service';
 import { WalletService } from '../services/wallet.service';
 import { ShiprocketService } from '../services/shiprocket.service';
 import { RazorpayService } from '../services/razorpay.service';
+import { RetailerService } from '../services/retailer.service';
+import { getEffectiveUnitPrice, PricingRole } from '../utils/pricing';
 import { IEmbeddedAddress, IOrderItem } from '../models/order.model';
+
+/** Resolve the buyer's pricing role + retailer id from their Firebase uid. */
+const resolvePricingContext = async (
+  firebaseUid: string
+): Promise<{ role: PricingRole; retailerId: string | null }> => {
+  try {
+    const retailer = await RetailerService.getRetailerByFirebaseUid(firebaseUid);
+    if (retailer) return { role: 'retailer', retailerId: String(retailer._id) };
+  } catch {
+    /* fall through to normal pricing */
+  }
+  return { role: 'normal', retailerId: null };
+};
 
 const PICKUP_POSTCODE = process.env.SHIPROCKET_PICKUP_POSTCODE || '';
 const PICKUP_LOCATION = process.env.SHIPROCKET_PICKUP_LOCATION_NAME || 'Primary';
@@ -83,25 +98,32 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
       razorpaySignature?: string;
     };
 
-    // Enrich items with product name, sku, weight
+    // Enrich items with product name, sku, weight — and compute the price
+    // server-side (never trust the client-sent price).
     const productIds = items.map((i) => i.productId);
     const products = await Product.find({ _id: { $in: productIds } });
+    const { role, retailerId } = await resolvePricingContext(req.user!.uid);
 
     const orderItems: IOrderItem[] = items.map((item) => {
       const product = products.find((p) => (p._id as any).toString() === item.productId);
+      if (!product) {
+        throw new Error('PRODUCT_NOT_FOUND');
+      }
+      const quantity = Math.max(1, Math.floor(Number(item.quantity) || 0));
       return {
         productId: new mongoose.Types.ObjectId(item.productId),
-        name: product?.name ?? 'Unknown Product',
-        sku: product?.sku ?? '',
-        quantity: item.quantity,
-        price: item.price,
+        name: product.name,
+        sku: product.sku,
+        quantity,
+        price: getEffectiveUnitPrice(product, quantity, role, retailerId),
         variant: item.variant,
-        weight: (product?.weight ?? 0.5) * item.quantity,
+        weight: (product.weight ?? 0.5) * quantity,
       };
     });
 
     const subtotal = orderItems.reduce((sum, i) => sum + i.price * i.quantity, 0);
-    const total = subtotal + shippingCharge;
+    const safeShipping = Math.max(0, Number(shippingCharge) || 0);
+    const total = subtotal + safeShipping;
 
     // For Razorpay: verify the payment signature AND that the amount actually
     // paid matches this order's total (prevents paying for a cheaper order then
@@ -168,7 +190,7 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
         shippingAddress,
         billingAddress,
         subtotal,
-        shippingCharge,
+        shippingCharge: safeShipping,
         total,
         notes,
         paymentMethod,
@@ -250,6 +272,11 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
       return;
     }
 
+    if (error.message === 'PRODUCT_NOT_FOUND') {
+      res.status(400).json({ success: false, message: 'One or more products no longer exist' });
+      return;
+    }
+
     if (error.message === 'User not found') {
       res.status(404).json({ success: false, message: 'User not found' });
       return;
@@ -270,7 +297,7 @@ export const createRazorpayCheckoutOrder = async (req: Request, res: Response): 
   try {
     const userId = await resolveUserId(req.user!.uid);
     const { items, shippingCharge = 0 } = req.body as {
-      items: Array<{ price: number; quantity: number }>;
+      items: Array<{ productId: string; quantity: number }>;
       shippingCharge?: number;
     };
 
@@ -279,8 +306,23 @@ export const createRazorpayCheckoutOrder = async (req: Request, res: Response): 
       return;
     }
 
-    const subtotal = items.reduce((s, i) => s + (Number(i.price) || 0) * (Number(i.quantity) || 0), 0);
-    const total = subtotal + (Number(shippingCharge) || 0);
+    // Compute the amount server-side (same effective pricing as createOrder), so
+    // the Razorpay order amount can't be tampered with by the client.
+    const products = await Product.find({ _id: { $in: items.map((i) => i.productId) } });
+    const { role, retailerId } = await resolvePricingContext(req.user!.uid);
+
+    let subtotal = 0;
+    for (const item of items) {
+      const product = products.find((p) => (p._id as any).toString() === item.productId);
+      if (!product) {
+        res.status(400).json({ success: false, message: 'One or more products no longer exist' });
+        return;
+      }
+      const quantity = Math.max(1, Math.floor(Number(item.quantity) || 0));
+      subtotal += getEffectiveUnitPrice(product, quantity, role, retailerId) * quantity;
+    }
+
+    const total = subtotal + Math.max(0, Number(shippingCharge) || 0);
     if (total <= 0) {
       res.status(400).json({ success: false, message: 'Invalid order total' });
       return;
