@@ -15,6 +15,13 @@ export interface PricingContext {
   retailerCategoryDiscounts?: RetailerCategoryDiscount[];
   /** Active category campaign % for THIS product's category (normal role only). */
   categoryCampaignPercent?: number;
+  /**
+   * Total quantity of THIS product's category across the whole cart/order.
+   * The retailer category-discount slab is matched against this (not the line
+   * quantity), so e.g. 30 of A + 20 of B in one category counts as 50.
+   * Falls back to the line quantity when omitted.
+   */
+  categoryQuantity?: number;
 }
 
 const round2 = (n: number): number => Math.round(n * 100) / 100;
@@ -63,10 +70,12 @@ export const getEffectiveUnitPrice = (
     }
 
     // 2. Retailer's negotiated per-category percentage slab (off base price).
+    //    Matched against the whole-cart category quantity, not the line qty.
     const catDiscount = ctx.retailerCategoryDiscounts?.find(
       (d) => String(d.category) === String(product.category)
     );
-    const discountPct = catDiscount ? matchingDiscountPercent(catDiscount.slabs, quantity) : null;
+    const categoryQty = ctx.categoryQuantity ?? quantity;
+    const discountPct = catDiscount ? matchingDiscountPercent(catDiscount.slabs, categoryQty) : null;
     if (discountPct !== null && discountPct > 0) {
       return round2(product.price * (1 - discountPct / 100));
     }

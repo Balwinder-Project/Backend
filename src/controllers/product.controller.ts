@@ -4,7 +4,6 @@ import { CatalogueQcService } from '../services/catalogueQc.service';
 import { MockupService } from '../services/mockup.service';
 import { RetailerService } from '../services/retailer.service';
 import { DiscountCampaignService } from '../services/discountCampaign.service';
-import { retailerCategorySlabsToPrices } from '../utils/pricing';
 import { ADMIN_ROLE_CLAIM, hasAdminPermission } from '../constants/adminRoles';
 import { transformProductImages } from '../utils/imageTransform';
 
@@ -40,13 +39,19 @@ const resolveBuyerPricing = (obj: any, retailer: any | null, campaignPercents: M
     if (match && Array.isArray(match.slabs) && match.slabs.length > 0) {
       obj.retailerPricing = { minimumOrderQuantity: match.minimumOrderQuantity ?? 1, slabs: match.slabs };
     } else {
+      // Attach the retailer's category-discount slabs (raw %). The discount is
+      // based on the whole-cart quantity for this category, so it's applied at
+      // cart/checkout time on the client and re-verified in createOrder.
       const catDiscount = (retailer.categoryDiscounts || []).find(
         (d: any) => String(d.category) === categoryId
       );
       if (catDiscount && Array.isArray(catDiscount.slabs) && catDiscount.slabs.length > 0) {
-        obj.retailerPricing = {
-          minimumOrderQuantity: obj.retailerPricing?.minimumOrderQuantity ?? 1,
-          slabs: retailerCategorySlabsToPrices(obj.price, catDiscount.slabs),
+        obj.retailerCategoryDiscount = {
+          category: categoryId,
+          slabs: catDiscount.slabs.map((s: any) => ({
+            minQuantity: s.minQuantity,
+            discountPercentage: s.discountPercentage,
+          })),
         };
       }
     }

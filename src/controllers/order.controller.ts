@@ -121,6 +121,17 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
     const buyer = await resolvePricingContext(req.user!.uid);
     const campaignPercents = await DiscountCampaignService.getActiveCategoryPercents();
 
+    // Total quantity per category across the order — retailer category-discount
+    // slabs are matched against this (whole-cart), not the per-line quantity.
+    const categoryTotals = new Map<string, number>();
+    for (const item of items) {
+      const product = products.find((p) => (p._id as any).toString() === item.productId);
+      if (!product) continue;
+      const qty = Math.max(1, Math.floor(Number(item.quantity) || 0));
+      const key = String(product.category);
+      categoryTotals.set(key, (categoryTotals.get(key) || 0) + qty);
+    }
+
     const orderItems: IOrderItem[] = items.map((item) => {
       const product = products.find((p) => (p._id as any).toString() === item.productId);
       if (!product) {
@@ -132,6 +143,7 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
         retailerId: buyer.retailerId,
         retailerCategoryDiscounts: buyer.retailerCategoryDiscounts,
         categoryCampaignPercent: campaignPercents.get(String(product.category)) || 0,
+        categoryQuantity: categoryTotals.get(String(product.category)) || quantity,
       });
       return {
         productId: new mongoose.Types.ObjectId(item.productId),
@@ -335,6 +347,15 @@ export const createRazorpayCheckoutOrder = async (req: Request, res: Response): 
     const buyer = await resolvePricingContext(req.user!.uid);
     const campaignPercents = await DiscountCampaignService.getActiveCategoryPercents();
 
+    const categoryTotals = new Map<string, number>();
+    for (const item of items) {
+      const product = products.find((p) => (p._id as any).toString() === item.productId);
+      if (!product) continue;
+      const qty = Math.max(1, Math.floor(Number(item.quantity) || 0));
+      const key = String(product.category);
+      categoryTotals.set(key, (categoryTotals.get(key) || 0) + qty);
+    }
+
     let subtotal = 0;
     for (const item of items) {
       const product = products.find((p) => (p._id as any).toString() === item.productId);
@@ -348,6 +369,7 @@ export const createRazorpayCheckoutOrder = async (req: Request, res: Response): 
         retailerId: buyer.retailerId,
         retailerCategoryDiscounts: buyer.retailerCategoryDiscounts,
         categoryCampaignPercent: campaignPercents.get(String(product.category)) || 0,
+        categoryQuantity: categoryTotals.get(String(product.category)) || quantity,
       }) * quantity;
     }
 
