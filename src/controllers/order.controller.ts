@@ -7,20 +7,36 @@ import { WalletService } from '../services/wallet.service';
 import { ShiprocketService } from '../services/shiprocket.service';
 import { RazorpayService } from '../services/razorpay.service';
 import { RetailerService } from '../services/retailer.service';
-import { getEffectiveUnitPrice, PricingRole } from '../utils/pricing';
+import { DiscountCampaignService } from '../services/discountCampaign.service';
+import { getEffectiveUnitPrice, PricingRole, RetailerCategoryDiscount } from '../utils/pricing';
 import { IEmbeddedAddress, IOrderItem } from '../models/order.model';
 
-/** Resolve the buyer's pricing role + retailer id from their Firebase uid. */
-const resolvePricingContext = async (
-  firebaseUid: string
-): Promise<{ role: PricingRole; retailerId: string | null }> => {
+interface BuyerPricing {
+  role: PricingRole;
+  retailerId: string | null;
+  retailerCategoryDiscounts: RetailerCategoryDiscount[];
+}
+
+/** Resolve the buyer's pricing role, retailer id, and negotiated category discounts. */
+const resolvePricingContext = async (firebaseUid: string): Promise<BuyerPricing> => {
   try {
     const retailer = await RetailerService.getRetailerByFirebaseUid(firebaseUid);
-    if (retailer) return { role: 'retailer', retailerId: String(retailer._id) };
+    if (retailer) {
+      const retailerCategoryDiscounts: RetailerCategoryDiscount[] = (retailer.categoryDiscounts || []).map(
+        (d: any) => ({
+          category: String(d.category),
+          slabs: (d.slabs || []).map((s: any) => ({
+            minQuantity: s.minQuantity,
+            discountPercentage: s.discountPercentage,
+          })),
+        })
+      );
+      return { role: 'retailer', retailerId: String(retailer._id), retailerCategoryDiscounts };
+    }
   } catch {
     /* fall through to normal pricing */
   }
-  return { role: 'normal', retailerId: null };
+  return { role: 'normal', retailerId: null, retailerCategoryDiscounts: [] };
 };
 
 const PICKUP_POSTCODE = process.env.SHIPROCKET_PICKUP_POSTCODE || '';
@@ -102,7 +118,8 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
     // server-side (never trust the client-sent price).
     const productIds = items.map((i) => i.productId);
     const products = await Product.find({ _id: { $in: productIds } });
-    const { role, retailerId } = await resolvePricingContext(req.user!.uid);
+    const buyer = await resolvePricingContext(req.user!.uid);
+    const campaignPercents = await DiscountCampaignService.getActiveCategoryPercents();
 
     const orderItems: IOrderItem[] = items.map((item) => {
       const product = products.find((p) => (p._id as any).toString() === item.productId);
@@ -110,12 +127,18 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
         throw new Error('PRODUCT_NOT_FOUND');
       }
       const quantity = Math.max(1, Math.floor(Number(item.quantity) || 0));
+      const price = getEffectiveUnitPrice(product, quantity, {
+        role: buyer.role,
+        retailerId: buyer.retailerId,
+        retailerCategoryDiscounts: buyer.retailerCategoryDiscounts,
+        categoryCampaignPercent: campaignPercents.get(String(product.category)) || 0,
+      });
       return {
         productId: new mongoose.Types.ObjectId(item.productId),
         name: product.name,
         sku: product.sku,
         quantity,
-        price: getEffectiveUnitPrice(product, quantity, role, retailerId),
+        price,
         variant: item.variant,
         weight: (product.weight ?? 0.5) * quantity,
       };
@@ -309,7 +332,8 @@ export const createRazorpayCheckoutOrder = async (req: Request, res: Response): 
     // Compute the amount server-side (same effective pricing as createOrder), so
     // the Razorpay order amount can't be tampered with by the client.
     const products = await Product.find({ _id: { $in: items.map((i) => i.productId) } });
-    const { role, retailerId } = await resolvePricingContext(req.user!.uid);
+    const buyer = await resolvePricingContext(req.user!.uid);
+    const campaignPercents = await DiscountCampaignService.getActiveCategoryPercents();
 
     let subtotal = 0;
     for (const item of items) {
@@ -319,7 +343,12 @@ export const createRazorpayCheckoutOrder = async (req: Request, res: Response): 
         return;
       }
       const quantity = Math.max(1, Math.floor(Number(item.quantity) || 0));
-      subtotal += getEffectiveUnitPrice(product, quantity, role, retailerId) * quantity;
+      subtotal += getEffectiveUnitPrice(product, quantity, {
+        role: buyer.role,
+        retailerId: buyer.retailerId,
+        retailerCategoryDiscounts: buyer.retailerCategoryDiscounts,
+        categoryCampaignPercent: campaignPercents.get(String(product.category)) || 0,
+      }) * quantity;
     }
 
     const total = subtotal + Math.max(0, Number(shippingCharge) || 0);

@@ -1,6 +1,18 @@
 import mongoose, { Document, Schema } from 'mongoose';
 import { INDIAN_STATES } from '../constants/indian-states';
 
+/** A quantity slab that grants a percentage discount for a retailer. */
+export interface IRetailerCategorySlab {
+  minQuantity: number;
+  discountPercentage: number;
+}
+
+/** Per-category quantity-slab discounts negotiated for a specific retailer. */
+export interface IRetailerCategoryDiscount {
+  category: mongoose.Types.ObjectId;
+  slabs: IRetailerCategorySlab[];
+}
+
 export interface IRetailer extends Document {
   name: string;
   city: string;
@@ -9,6 +21,7 @@ export interface IRetailer extends Document {
   email: string;
   phone: string;
   firebaseUid: string;
+  categoryDiscounts: IRetailerCategoryDiscount[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -63,7 +76,30 @@ const retailerSchema = new Schema<IRetailer>(
       required: [true, 'Firebase UID is required'],
       unique: true,
       index: true
-    }
+    },
+    // Per-category quantity-slab percentage discounts for this retailer.
+    categoryDiscounts: {
+      type: [
+        {
+          category: { type: Schema.Types.ObjectId, ref: 'Category', required: true },
+          slabs: {
+            type: [
+              {
+                minQuantity: { type: Number, required: true, min: [1, 'Minimum quantity must be at least 1'] },
+                discountPercentage: {
+                  type: Number,
+                  required: true,
+                  min: [0, 'Percentage cannot be negative'],
+                  max: [100, 'Percentage cannot exceed 100'],
+                },
+              },
+            ],
+            default: [],
+          },
+        },
+      ],
+      default: [],
+    },
   },
   {
     timestamps: true,

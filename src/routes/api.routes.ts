@@ -15,6 +15,7 @@ import qcRoutes from './qc.routes';
 import heroSlideRoutes from './heroSlide.routes';
 import mockupTemplateRoutes from './mockupTemplate.routes';
 import dimensionTemplateRoutes from './dimensionTemplate.routes';
+import discountCampaignRoutes from './discountCampaign.routes';
 
 const router = Router();
 
@@ -38,6 +39,7 @@ router.use(`${API_VERSION}/qc`, qcRoutes);
 router.use(`${API_VERSION}/hero-slides`, heroSlideRoutes);
 router.use(`${API_VERSION}/mockup-templates`, mockupTemplateRoutes);
 router.use(`${API_VERSION}/dimension-templates`, dimensionTemplateRoutes);
+router.use(`${API_VERSION}/discount-campaigns`, discountCampaignRoutes);
 
 // API info endpoint
 router.get('/', (_req, res) => {

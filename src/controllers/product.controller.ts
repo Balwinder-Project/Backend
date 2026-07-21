@@ -3,6 +3,8 @@ import { ProductService } from '../services/product.service';
 import { CatalogueQcService } from '../services/catalogueQc.service';
 import { MockupService } from '../services/mockup.service';
 import { RetailerService } from '../services/retailer.service';
+import { DiscountCampaignService } from '../services/discountCampaign.service';
+import { retailerCategorySlabsToPrices } from '../utils/pricing';
 import { ADMIN_ROLE_CLAIM, hasAdminPermission } from '../constants/adminRoles';
 import { transformProductImages } from '../utils/imageTransform';
 
@@ -13,35 +15,55 @@ const parseBooleanQuery = (value: unknown): boolean | undefined => {
   return undefined;
 };
 
+const productCategoryId = (obj: any): string => {
+  if (obj.category && typeof obj.category === 'object') return String(obj.category.id || obj.category._id || '');
+  return String(obj.category || '');
+};
+
 /**
- * Resolve per-retailer pricing for a public (non-admin) product response.
- * If the requesting retailer has a special-pricing entry, its slabs replace the
- * product-wide retailerPricing. The full retailerSpecialPricing array is always
- * stripped so no retailer can see another retailer's negotiated prices.
+ * Resolve pricing for a public (non-admin) product response.
+ *  - Retailer: per-product special slabs → their per-category % discount (as
+ *    absolute slabs) → global wholesale slabs. retailerSpecialPricing is always
+ *    stripped so no retailer sees another's negotiated prices.
+ *  - Normal / guest: attach the active category campaign %.
  * @param obj  A product plain object (post toJSON).
- * @param retailerId  The requesting retailer's _id, or null for guests/customers.
+ * @param retailer  The requesting retailer doc, or null for guests/customers.
+ * @param campaignPercents  categoryId -> active campaign %.
  */
-const resolveRetailerPricing = (obj: any, retailerId: string | null): any => {
+const resolveBuyerPricing = (obj: any, retailer: any | null, campaignPercents: Map<string, number>): any => {
   const special = Array.isArray(obj.retailerSpecialPricing) ? obj.retailerSpecialPricing : [];
-  if (retailerId) {
-    const match = special.find((s: any) => String(s.retailer) === String(retailerId));
+  const categoryId = productCategoryId(obj);
+
+  if (retailer) {
+    const retailerId = String(retailer._id);
+    const match = special.find((s: any) => String(s.retailer) === retailerId);
     if (match && Array.isArray(match.slabs) && match.slabs.length > 0) {
-      obj.retailerPricing = {
-        minimumOrderQuantity: match.minimumOrderQuantity ?? 1,
-        slabs: match.slabs,
-      };
+      obj.retailerPricing = { minimumOrderQuantity: match.minimumOrderQuantity ?? 1, slabs: match.slabs };
+    } else {
+      const catDiscount = (retailer.categoryDiscounts || []).find(
+        (d: any) => String(d.category) === categoryId
+      );
+      if (catDiscount && Array.isArray(catDiscount.slabs) && catDiscount.slabs.length > 0) {
+        obj.retailerPricing = {
+          minimumOrderQuantity: obj.retailerPricing?.minimumOrderQuantity ?? 1,
+          slabs: retailerCategorySlabsToPrices(obj.price, catDiscount.slabs),
+        };
+      }
     }
+    obj.categoryCampaignPercent = 0; // retailers keep their own pricing
+  } else {
+    obj.categoryCampaignPercent = campaignPercents.get(categoryId) || 0;
   }
+
   delete obj.retailerSpecialPricing;
   return obj;
 };
 
-/** Look up the requesting user's retailer _id (null if they aren't a retailer). */
-const getRequestingRetailerId = async (req: Request): Promise<string | null> => {
+/** Look up the requesting user's retailer doc (null if they aren't a retailer). */
+const getRequestingRetailer = async (req: Request): Promise<any | null> => {
   if (!req.user?.uid) return null;
   try {
-    const retailer = await RetailerService.getRetailerByFirebaseUid(req.user.uid);
-    return retailer ? String(retailer._id) : null;
+    return await RetailerService.getRetailerByFirebaseUid(req.user.uid);
   } catch {
     return null;
   }
@@ -192,11 +214,12 @@ export const getAllProducts = async (req: Request, res: Response): Promise<void>
     if (isAdmin) {
       products = result.products;
     } else {
-      const retailerId = await getRequestingRetailerId(req);
+      const retailer = await getRequestingRetailer(req);
+      const campaignPercents = retailer ? new Map<string, number>() : await DiscountCampaignService.getActiveCategoryPercents();
       products = result.products.map((p: any) => {
         const obj = typeof p.toJSON === 'function' ? p.toJSON() : { ...p };
         obj.images = transformProductImages(obj.images || [], 'thumbnail');
-        return resolveRetailerPricing(obj, retailerId);
+        return resolveBuyerPricing(obj, retailer, campaignPercents);
       });
     }
 
@@ -249,8 +272,9 @@ export const getProductById = async (req: Request, res: Response): Promise<void>
 
     const productObj: any = typeof (product as any).toJSON === 'function' ? (product as any).toJSON() : { ...product };
     productObj.images = transformProductImages(productObj.images || [], 'watermarked');
-    const retailerId = await getRequestingRetailerId(req);
-    resolveRetailerPricing(productObj, retailerId);
+    const retailer = await getRequestingRetailer(req);
+    const campaignPercents = retailer ? new Map<string, number>() : await DiscountCampaignService.getActiveCategoryPercents();
+    resolveBuyerPricing(productObj, retailer, campaignPercents);
 
     res.status(200).json({
       success: true,

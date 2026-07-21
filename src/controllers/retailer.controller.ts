@@ -27,7 +27,7 @@ export const getMyRetailerStatus = async (req: Request, res: Response): Promise<
  */
 export const createRetailer = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { name, city, state, pincode, email, phone, password } = req.body;
+    const { name, city, state, pincode, email, phone, password, categoryDiscounts } = req.body;
 
     const retailer = await RetailerService.createRetailer({
       name,
@@ -36,7 +36,8 @@ export const createRetailer = async (req: Request, res: Response): Promise<void>
       pincode,
       email,
       phone,
-      password
+      password,
+      categoryDiscounts
     });
 
     res.status(201).json({
@@ -166,7 +167,7 @@ export const getRetailerById = async (req: Request, res: Response): Promise<void
 export const updateRetailer = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const { name, city, state, pincode, email, phone, password } = req.body;
+    const { name, city, state, pincode, email, phone, password, categoryDiscounts } = req.body;
 
     const retailer = await RetailerService.updateRetailer(id, {
       name,
@@ -175,7 +176,8 @@ export const updateRetailer = async (req: Request, res: Response): Promise<void>
       pincode,
       email,
       phone,
-      password
+      password,
+      categoryDiscounts
     });
 
     if (!retailer) {
