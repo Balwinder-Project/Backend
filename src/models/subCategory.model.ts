@@ -8,6 +8,8 @@ export interface ISubCategory extends Document {
   parent?: mongoose.Types.ObjectId | null;
   isActive: boolean;
   isHolographic: boolean;
+  image?: string;
+  showOnHomepage: boolean;
   fieldTemplate?: any;
   createdAt: Date;
   updatedAt: Date;
@@ -52,6 +54,15 @@ const subCategorySchema = new Schema<ISubCategory>(
     isHolographic: {
       type: Boolean,
       default: false,
+    },
+    image: {
+      type: String,
+      trim: true,
+    },
+    showOnHomepage: {
+      type: Boolean,
+      default: false,
+      index: true,
     },
     fieldTemplate: {
       type: Schema.Types.Mixed,

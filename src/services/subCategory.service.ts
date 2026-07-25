@@ -6,6 +6,7 @@ interface SubCategoryQuery {
   category?: string;
   parent?: string | null;
   isActive?: boolean;
+  showOnHomepage?: boolean;
   $or?: any[];
 }
 
@@ -24,7 +25,8 @@ export class SubCategoryService {
     search?: string,
     categoryId?: string,
     isActive?: boolean,
-    parentId?: string | null
+    parentId?: string | null,
+    showOnHomepage?: boolean
   ): Promise<{ subCategories: ISubCategory[]; total: number; page: number; totalPages: number }> {
     const skip = (page - 1) * limit;
     const query: SubCategoryQuery = {};
@@ -32,6 +34,7 @@ export class SubCategoryService {
     if (categoryId) query.category = categoryId;
     if (typeof isActive === 'boolean') query.isActive = isActive;
     if (parentId !== undefined) query.parent = parentId;
+    if (typeof showOnHomepage === 'boolean') query.showOnHomepage = showOnHomepage;
     if (search) {
       query.$or = [
         { name: { $regex: search, $options: 'i' } },
