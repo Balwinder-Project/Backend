@@ -1,6 +1,32 @@
 import mongoose from 'mongoose';
 import Wallet, { IWallet } from '../models/wallet.model';
 import WalletTransaction, { IWalletTransaction, TransactionType } from '../models/walletTransaction.model';
+import { supportsTransactions } from '../utils/mongoTransactions';
+
+/**
+ * Run wallet writes inside a transaction when the deployment supports it
+ * (replica set / mongos), and without one on a standalone MongoDB — which
+ * otherwise throws "Transaction numbers are only allowed on a replica set
+ * member or mongos". Always creates a session so the balance read + writes
+ * share it; only the transaction wrapping is conditional.
+ */
+async function withOptionalTransaction<T>(
+  fn: (session: mongoose.ClientSession) => Promise<T>
+): Promise<T> {
+  const useTxn = await supportsTransactions();
+  const session = await mongoose.startSession();
+  if (useTxn) session.startTransaction();
+  try {
+    const result = await fn(session);
+    if (useTxn) await session.commitTransaction();
+    return result;
+  } catch (error) {
+    if (useTxn && session.inTransaction()) await session.abortTransaction();
+    throw error;
+  } finally {
+    session.endSession();
+  }
+}
 
 interface CreateWalletData {
   ownerId: string;
@@ -74,12 +100,9 @@ export class WalletService {
     ownerType: 'user' | 'retailer',
     data: TopUpWalletData
   ): Promise<{ wallet: IWallet; transaction: IWalletTransaction }> {
-    const session = await mongoose.startSession();
-    session.startTransaction();
-
-    try {
+    return withOptionalTransaction(async (session) => {
       const wallet = await this.getWalletByOwner(ownerId, ownerType);
-      
+
       if (!wallet) {
         throw new Error('Wallet not found');
       }
@@ -104,18 +127,11 @@ export class WalletService {
         metadata: data.metadata || {}
       }], { session });
 
-      await session.commitTransaction();
-      
       return {
         wallet,
         transaction: transaction[0]
       };
-    } catch (error) {
-      await session.abortTransaction();
-      throw error;
-    } finally {
-      session.endSession();
-    }
+    });
   }
 
   /**
@@ -129,12 +145,7 @@ export class WalletService {
     data: DeductWalletData,
     externalSession?: mongoose.ClientSession
   ): Promise<{ wallet: IWallet; transaction: IWalletTransaction }> {
-    const ownSession = !externalSession;
-    const session = externalSession ?? await mongoose.startSession();
-
-    if (ownSession) session.startTransaction();
-
-    try {
+    const run = async (session: mongoose.ClientSession) => {
       const wallet = await this.getWalletByOwner(ownerId, ownerType);
 
       if (!wallet) {
@@ -166,18 +177,15 @@ export class WalletService {
         metadata: data.metadata || {}
       }], { session });
 
-      if (ownSession) await session.commitTransaction();
-
       return {
         wallet,
         transaction: transaction[0]
       };
-    } catch (error) {
-      if (ownSession) await session.abortTransaction();
-      throw error;
-    } finally {
-      if (ownSession) session.endSession();
-    }
+    };
+
+    // Caller-managed session (its own transaction, if any): just use it.
+    // Otherwise wrap in an optional transaction (skipped on standalone Mongo).
+    return externalSession ? run(externalSession) : withOptionalTransaction(run);
   }
 
   /**
@@ -245,12 +253,9 @@ export class WalletService {
     performedBy?: string,
     metadata?: Record<string, any>
   ): Promise<{ wallet: IWallet; transaction: IWalletTransaction }> {
-    const session = await mongoose.startSession();
-    session.startTransaction();
-
-    try {
+    return withOptionalTransaction(async (session) => {
       const wallet = await this.getWalletByOwner(ownerId, ownerType);
-      
+
       if (!wallet) {
         throw new Error('Wallet not found');
       }
@@ -275,18 +280,11 @@ export class WalletService {
         metadata: metadata || {}
       }], { session });
 
-      await session.commitTransaction();
-      
       return {
         wallet,
         transaction: transaction[0]
       };
-    } catch (error) {
-      await session.abortTransaction();
-      throw error;
-    } finally {
-      session.endSession();
-    }
+    });
   }
 
   /**
@@ -300,12 +298,9 @@ export class WalletService {
     performedBy: string,
     metadata?: Record<string, any>
   ): Promise<{ wallet: IWallet; transaction: IWalletTransaction }> {
-    const session = await mongoose.startSession();
-    session.startTransaction();
-
-    try {
+    return withOptionalTransaction(async (session) => {
       const wallet = await this.getWalletByOwner(ownerId, ownerType);
-      
+
       if (!wallet) {
         throw new Error('Wallet not found');
       }
@@ -335,18 +330,11 @@ export class WalletService {
         metadata: { ...metadata, adjustmentAmount: amount }
       }], { session });
 
-      await session.commitTransaction();
-      
       return {
         wallet,
         transaction: transaction[0]
       };
-    } catch (error) {
-      await session.abortTransaction();
-      throw error;
-    } finally {
-      session.endSession();
-    }
+    });
   }
 }
 
