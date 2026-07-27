@@ -9,6 +9,7 @@ import { RazorpayService } from '../services/razorpay.service';
 import { RetailerService } from '../services/retailer.service';
 import { DiscountCampaignService } from '../services/discountCampaign.service';
 import { getEffectiveUnitPrice, PricingRole, RetailerCategoryDiscount } from '../utils/pricing';
+import { supportsTransactions } from '../utils/mongoTransactions';
 import { IEmbeddedAddress, IOrderItem } from '../models/order.model';
 
 interface BuyerPricing {
@@ -86,8 +87,14 @@ export const getShippingRates = async (req: Request, res: Response): Promise<voi
 };
 
 export const createOrder = async (req: Request, res: Response): Promise<void> => {
+  // Multi-document transactions need a replica set / mongos. On a standalone
+  // MongoDB they throw "Transaction numbers are only allowed on a replica set
+  // member or mongos", so fall back to non-transactional writes there. We still
+  // create a session and pass it through, so wallet/order writes share it and
+  // the wallet service doesn't spin up its own (failing) internal transaction.
+  const useTxn = await supportsTransactions();
   const session = await mongoose.startSession();
-  session.startTransaction();
+  if (useTxn) session.startTransaction();
 
   try {
     const userId = await resolveUserId(req.user!.uid);
@@ -170,32 +177,29 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
         razorpaySignature || ''
       );
       if (!validSignature) {
-        await session.abortTransaction();
+        if (useTxn) await session.abortTransaction();
         res.status(400).json({ success: false, message: 'Payment verification failed' });
         return;
       }
       const rzpOrder = await RazorpayService.getOrder(razorpayOrderId || '');
       const paidPaise = Number(rzpOrder?.amount || 0);
       if (paidPaise !== Math.round(total * 100)) {
-        await session.abortTransaction();
+        if (useTxn) await session.abortTransaction();
         res.status(400).json({ success: false, message: 'Paid amount does not match the order total' });
         return;
       }
     }
 
-    // 1. Take payment: deduct wallet, or (razorpay) rely on the verified
-    //    Razorpay payment above.
-    let walletTransactionId: mongoose.Types.ObjectId | undefined;
+    // 1. Insufficient-balance pre-check (read-only) for wallet payments, so we
+    //    never create an order the customer can't pay for. Reports the actual
+    //    figures the order sees for an unambiguous error.
     if (paymentMethod === 'wallet') {
-      // Explicit balance check that reports the actual figures the order sees,
-      // so an insufficient-balance response is unambiguous (and correct even if
-      // the wallet the order reads differs from what the UI shows).
       const availableBalance = await WalletService.getWalletBalance(userId, 'user');
       console.log(
         `[createOrder] wallet check — user=${userId} available=${availableBalance} required=${total}`
       );
       if (availableBalance === null || availableBalance < total) {
-        await session.abortTransaction();
+        if (useTxn) await session.abortTransaction();
         res.status(400).json({
           success: false,
           message: 'Insufficient wallet balance',
@@ -205,19 +209,9 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
         });
         return;
       }
-
-      const { transaction } = await WalletService.recordPurchase(
-        userId,
-        'user',
-        total,
-        `Payment for order`,
-        {},
-        session
-      );
-      walletTransactionId = transaction._id as mongoose.Types.ObjectId;
     }
 
-    // 2. Create order (within session)
+    // 2. Create the order first, so a failure here never debits the wallet.
     const order = await OrderService.createOrder(
       userId,
       {
@@ -235,12 +229,31 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
       session
     );
 
-    // Link wallet transaction (wallet payments only)
-    if (walletTransactionId) {
+    // 3. Take payment: debit the wallet (razorpay already paid + verified above).
+    //    Without a transaction (standalone Mongo) we can't roll back, so if the
+    //    debit fails we compensate by deleting the order we just created.
+    let walletTransactionId: mongoose.Types.ObjectId | undefined;
+    if (paymentMethod === 'wallet') {
+      try {
+        const { transaction } = await WalletService.recordPurchase(
+          userId,
+          'user',
+          total,
+          `Payment for order`,
+          {},
+          session
+        );
+        walletTransactionId = transaction._id as mongoose.Types.ObjectId;
+      } catch (debitErr) {
+        if (!useTxn) {
+          await OrderService.deleteOrderById((order._id as any).toString()).catch(() => {});
+        }
+        throw debitErr; // the outer catch aborts the transaction when useTxn
+      }
       await order.updateOne({ walletTransactionId }, { session });
     }
 
-    await session.commitTransaction();
+    if (useTxn) await session.commitTransaction();
 
     // 3. Create Shiprocket order AFTER commit — fire-and-forget (external HTTP, non-transactional)
     const orderDate = new Date().toISOString().split('T')[0];
@@ -295,7 +308,7 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
       data: order,
     });
   } catch (error: any) {
-    await session.abortTransaction();
+    if (useTxn && session.inTransaction()) await session.abortTransaction();
     console.error('Create order error:', error);
 
     if (error.message === 'Insufficient wallet balance') {

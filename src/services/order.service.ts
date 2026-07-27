@@ -54,6 +54,14 @@ export class OrderService {
     await Order.findByIdAndUpdate(orderId, { walletTransactionId });
   }
 
+  /**
+   * Hard-delete an order by id. Used to compensate a failed wallet debit when
+   * running without a transaction (standalone MongoDB).
+   */
+  static async deleteOrderById(orderId: string): Promise<void> {
+    await Order.findByIdAndDelete(orderId);
+  }
+
   static async updateShiprocketDetails(
     orderId: string,
     details: { shiprocketOrderId?: string; shiprocketShipmentId?: string }
