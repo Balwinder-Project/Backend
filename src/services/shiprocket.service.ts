@@ -21,7 +21,7 @@ export interface ShiprocketOrderPayload {
   order_date: string;
   pickup_location: string;
   billing_customer_name: string;
-  billing_last_name?: string;
+  billing_last_name: string;
   billing_address: string;
   billing_address_2?: string;
   billing_city: string;
@@ -32,6 +32,7 @@ export interface ShiprocketOrderPayload {
   billing_phone: string;
   shipping_is_billing: boolean;
   shipping_customer_name?: string;
+  shipping_last_name?: string;
   shipping_address?: string;
   shipping_address_2?: string;
   shipping_city?: string;

@@ -64,12 +64,22 @@ export async function pushOrderToShiprocket(order: IOrder): Promise<void> {
     const billingEmail =
       customer?.email || process.env.SHIPROCKET_EMAIL || 'orders@bndcreation.com';
     const to10Digits = (p?: string) => (p || '').replace(/\D/g, '').slice(-10);
+    // Shiprocket requires billing_last_name to be present. Split the stored
+    // full name into first + last (last stays '' for single-word names, which
+    // satisfies the "present" rule).
+    const splitName = (full?: string) => {
+      const parts = (full || '').trim().split(/\s+/).filter(Boolean);
+      return { first: parts[0] || 'Customer', last: parts.slice(1).join(' ') };
+    };
+    const billName = splitName(bill.name);
+    const shipName = splitName(ship.name);
 
     const sr = await ShiprocketService.createOrder({
       order_id: order.orderNumber,
       order_date: orderDate,
       pickup_location: PICKUP_LOCATION,
-      billing_customer_name: bill.name,
+      billing_customer_name: billName.first,
+      billing_last_name: billName.last,
       billing_address: bill.addressLine1,
       billing_address_2: bill.addressLine2,
       billing_city: bill.city,
@@ -79,7 +89,8 @@ export async function pushOrderToShiprocket(order: IOrder): Promise<void> {
       billing_email: billingEmail,
       billing_phone: to10Digits(bill.phone),
       shipping_is_billing: false,
-      shipping_customer_name: ship.name,
+      shipping_customer_name: shipName.first,
+      shipping_last_name: shipName.last,
       shipping_address: ship.addressLine1,
       shipping_address_2: ship.addressLine2,
       shipping_city: ship.city,
