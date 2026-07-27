@@ -10,7 +10,7 @@ import { RetailerService } from '../services/retailer.service';
 import { DiscountCampaignService } from '../services/discountCampaign.service';
 import { getEffectiveUnitPrice, PricingRole, RetailerCategoryDiscount } from '../utils/pricing';
 import { supportsTransactions } from '../utils/mongoTransactions';
-import { IEmbeddedAddress, IOrderItem } from '../models/order.model';
+import { IEmbeddedAddress, IOrder, IOrderItem } from '../models/order.model';
 
 interface BuyerPricing {
   role: PricingRole;
@@ -42,6 +42,71 @@ const resolvePricingContext = async (firebaseUid: string): Promise<BuyerPricing>
 
 const PICKUP_POSTCODE = process.env.SHIPROCKET_PICKUP_POSTCODE || '';
 const PICKUP_LOCATION = process.env.SHIPROCKET_PICKUP_LOCATION_NAME || 'Primary';
+
+/**
+ * Push a persisted order to Shiprocket and record the outcome on the order so
+ * failures are visible (order.shiprocketSyncStatus / shiprocketError) and can
+ * be retried, instead of being silently swallowed. Never throws.
+ */
+export async function pushOrderToShiprocket(order: IOrder): Promise<void> {
+  const orderId = (order._id as any).toString();
+  try {
+    const productIds = order.items.map((i) => i.productId);
+    const products = await Product.find({ _id: { $in: productIds } });
+    const orderDate = new Date(order.createdAt || Date.now()).toISOString().split('T')[0];
+    const bill = order.billingAddress;
+    const ship = order.shippingAddress;
+
+    const sr = await ShiprocketService.createOrder({
+      order_id: order.orderNumber,
+      order_date: orderDate,
+      pickup_location: PICKUP_LOCATION,
+      billing_customer_name: bill.name,
+      billing_address: bill.addressLine1,
+      billing_address_2: bill.addressLine2,
+      billing_city: bill.city,
+      billing_pincode: bill.pincode,
+      billing_state: bill.state,
+      billing_country: bill.country || 'India',
+      billing_phone: bill.phone,
+      shipping_is_billing: false,
+      shipping_customer_name: ship.name,
+      shipping_address: ship.addressLine1,
+      shipping_address_2: ship.addressLine2,
+      shipping_city: ship.city,
+      shipping_pincode: ship.pincode,
+      shipping_country: ship.country || 'India',
+      shipping_state: ship.state,
+      shipping_phone: ship.phone,
+      order_items: order.items.map((i) => ({
+        name: i.name,
+        sku: i.sku,
+        units: i.quantity,
+        selling_price: i.price,
+        weight: (i.weight || 0.5) / (i.quantity || 1),
+      })),
+      payment_method: 'Prepaid',
+      sub_total: order.subtotal,
+      length: products[0]?.length ?? 10,
+      breadth: products[0]?.breadth ?? 10,
+      height: products[0]?.height ?? 5,
+      weight: order.items.reduce((sum, i) => sum + (i.weight || 0.5), 0),
+    });
+
+    await OrderService.setShiprocketResult(orderId, {
+      status: 'success',
+      shiprocketOrderId: String(sr.order_id),
+      shiprocketShipmentId: String(sr.shipment_id),
+    });
+    console.log(`[shiprocket] order ${order.orderNumber} synced (sr_order=${sr.order_id})`);
+  } catch (err: any) {
+    console.error(`[shiprocket] order ${order.orderNumber} sync FAILED:`, err?.message);
+    await OrderService.setShiprocketResult(orderId, {
+      status: 'failed',
+      error: err?.message || 'Unknown Shiprocket error',
+    }).catch(() => {});
+  }
+}
 
 // Helper: resolve internal MongoDB user _id from Firebase UID
 async function resolveUserId(firebaseUid: string): Promise<string> {
@@ -255,52 +320,10 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
 
     if (useTxn) await session.commitTransaction();
 
-    // 3. Create Shiprocket order AFTER commit — fire-and-forget (external HTTP, non-transactional)
-    const orderDate = new Date().toISOString().split('T')[0];
-    ShiprocketService.createOrder({
-      order_id: order.orderNumber,
-      order_date: orderDate,
-      pickup_location: PICKUP_LOCATION,
-      billing_customer_name: billingAddress.name,
-      billing_address: billingAddress.addressLine1,
-      billing_address_2: billingAddress.addressLine2,
-      billing_city: billingAddress.city,
-      billing_pincode: billingAddress.pincode,
-      billing_state: billingAddress.state,
-      billing_country: billingAddress.country || 'India',
-      billing_phone: billingAddress.phone,
-      shipping_is_billing: false,
-      shipping_customer_name: shippingAddress.name,
-      shipping_address: shippingAddress.addressLine1,
-      shipping_address_2: shippingAddress.addressLine2,
-      shipping_city: shippingAddress.city,
-      shipping_pincode: shippingAddress.pincode,
-      shipping_country: shippingAddress.country || 'India',
-      shipping_state: shippingAddress.state,
-      shipping_phone: shippingAddress.phone,
-      order_items: orderItems.map((i) => ({
-        name: i.name,
-        sku: i.sku,
-        units: i.quantity,
-        selling_price: i.price,
-        weight: i.weight / i.quantity,
-      })),
-      payment_method: 'Prepaid',
-      sub_total: subtotal,
-      length: products[0]?.length ?? 10,
-      breadth: products[0]?.breadth ?? 10,
-      height: products[0]?.height ?? 5,
-      weight: orderItems.reduce((sum, i) => sum + i.weight, 0),
-    })
-      .then((sr) => {
-        return OrderService.updateShiprocketDetails((order._id as any).toString(), {
-          shiprocketOrderId: String(sr.order_id),
-          shiprocketShipmentId: String(sr.shipment_id),
-        });
-      })
-      .catch((err) => {
-        console.error('Shiprocket order creation failed (non-fatal):', err.message);
-      });
+    // Push to Shiprocket AFTER commit — fire-and-forget, but the outcome is now
+    // recorded on the order (shiprocketSyncStatus / shiprocketError) so a
+    // failure is visible in admin and retryable, not silently lost.
+    pushOrderToShiprocket(order).catch(() => {});
 
     res.status(201).json({
       success: true,
@@ -574,5 +597,40 @@ export const shiprocketWebhook = async (req: Request, res: Response): Promise<vo
     console.log(`Shiprocket webhook: updated order with AWB ${awb} to status ${mappedStatus}`);
   } catch (error: any) {
     console.error('Shiprocket webhook processing error (non-fatal):', error.message);
+  }
+};
+
+/**
+ * Admin: retry pushing an order to Shiprocket after a failed sync.
+ * POST /api/v1/orders/admin/:id/shiprocket-retry
+ */
+export const retryShiprocketSync = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const order = await OrderService.getOrderById(id);
+    if (!order) {
+      res.status(404).json({ success: false, message: 'Order not found' });
+      return;
+    }
+    if (order.shiprocketOrderId) {
+      res.status(400).json({ success: false, message: 'Order is already synced to Shiprocket', data: order });
+      return;
+    }
+
+    await pushOrderToShiprocket(order);
+    const updated = await OrderService.getOrderById(id);
+
+    if (updated?.shiprocketSyncStatus === 'success') {
+      res.status(200).json({ success: true, message: 'Order synced to Shiprocket', data: updated });
+    } else {
+      res.status(502).json({
+        success: false,
+        message: updated?.shiprocketError || 'Shiprocket sync failed',
+        data: updated,
+      });
+    }
+  } catch (error: any) {
+    console.error('Retry Shiprocket sync error:', error);
+    res.status(500).json({ success: false, message: error.message || 'Failed to retry Shiprocket sync' });
   }
 };

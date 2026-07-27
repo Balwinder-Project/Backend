@@ -69,6 +69,31 @@ export class OrderService {
     await Order.findByIdAndUpdate(orderId, details);
   }
 
+  /**
+   * Record the outcome of pushing an order to Shiprocket so failures are
+   * visible (and retryable) instead of silently swallowed.
+   */
+  static async setShiprocketResult(
+    orderId: string,
+    result:
+      | { status: 'success'; shiprocketOrderId: string; shiprocketShipmentId: string }
+      | { status: 'failed'; error: string }
+  ): Promise<void> {
+    if (result.status === 'success') {
+      await Order.findByIdAndUpdate(orderId, {
+        shiprocketSyncStatus: 'success',
+        shiprocketOrderId: result.shiprocketOrderId,
+        shiprocketShipmentId: result.shiprocketShipmentId,
+        shiprocketError: undefined,
+      });
+    } else {
+      await Order.findByIdAndUpdate(orderId, {
+        shiprocketSyncStatus: 'failed',
+        shiprocketError: result.error?.slice(0, 1000),
+      });
+    }
+  }
+
   static async getUserOrders(
     userId: string,
     page: number = 1,

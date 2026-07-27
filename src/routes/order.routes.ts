@@ -8,6 +8,7 @@ import {
   getAllOrdersAdmin,
   getAdminOrderById,
   updateAdminOrderStatus,
+  retryShiprocketSync,
   shiprocketWebhook,
 } from '../controllers/order.controller';
 import { authenticateUser } from '../middleware/auth.middleware';
@@ -29,6 +30,7 @@ router.post('/razorpay/create-order', authenticateUser, createRazorpayCheckoutOr
 router.get('/admin/all', authenticateUser, requireAdmin, getAllOrdersAdmin);
 router.get('/admin/:id', authenticateUser, requireAdmin, getAdminOrderById);
 router.put('/admin/:id/status', authenticateUser, requireAdmin, updateOrderStatusValidator, validateRequest, updateAdminOrderStatus);
+router.post('/admin/:id/shiprocket-retry', authenticateUser, requireAdmin, retryShiprocketSync);
 
 router.get('/', authenticateUser, getUserOrders);
 router.get('/:id', authenticateUser, getOrderById);

@@ -48,6 +48,8 @@ export interface IOrder extends Document {
   status: OrderStatus;
   shiprocketOrderId?: string;
   shiprocketShipmentId?: string;
+  shiprocketSyncStatus?: 'pending' | 'success' | 'failed';
+  shiprocketError?: string;
   awbCode?: string;
   courierName?: string;
   estimatedDeliveryDate?: Date;
@@ -133,6 +135,8 @@ const orderSchema = new Schema<IOrder>(
     },
     shiprocketOrderId: { type: String },
     shiprocketShipmentId: { type: String },
+    shiprocketSyncStatus: { type: String, enum: ['pending', 'success', 'failed'] },
+    shiprocketError: { type: String },
     awbCode: { type: String, index: true },
     courierName: { type: String },
     estimatedDeliveryDate: { type: Date },
