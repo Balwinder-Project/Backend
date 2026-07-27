@@ -57,6 +57,14 @@ export async function pushOrderToShiprocket(order: IOrder): Promise<void> {
     const bill = order.billingAddress;
     const ship = order.shippingAddress;
 
+    // Shiprocket requires a billing email and a clean 10-digit phone. The
+    // embedded address stores no email, so fall back to the customer's account
+    // email (then the Shiprocket account email as a last resort).
+    const customer = await User.findById(order.userId).select('email').lean();
+    const billingEmail =
+      customer?.email || process.env.SHIPROCKET_EMAIL || 'orders@bndcreation.com';
+    const to10Digits = (p?: string) => (p || '').replace(/\D/g, '').slice(-10);
+
     const sr = await ShiprocketService.createOrder({
       order_id: order.orderNumber,
       order_date: orderDate,
@@ -68,7 +76,8 @@ export async function pushOrderToShiprocket(order: IOrder): Promise<void> {
       billing_pincode: bill.pincode,
       billing_state: bill.state,
       billing_country: bill.country || 'India',
-      billing_phone: bill.phone,
+      billing_email: billingEmail,
+      billing_phone: to10Digits(bill.phone),
       shipping_is_billing: false,
       shipping_customer_name: ship.name,
       shipping_address: ship.addressLine1,
@@ -77,7 +86,7 @@ export async function pushOrderToShiprocket(order: IOrder): Promise<void> {
       shipping_pincode: ship.pincode,
       shipping_country: ship.country || 'India',
       shipping_state: ship.state,
-      shipping_phone: ship.phone,
+      shipping_phone: to10Digits(ship.phone),
       order_items: order.items.map((i) => ({
         name: i.name,
         sku: i.sku,
