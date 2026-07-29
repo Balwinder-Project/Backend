@@ -84,7 +84,7 @@ export class OrderService {
         shiprocketSyncStatus: 'success',
         shiprocketOrderId: result.shiprocketOrderId,
         shiprocketShipmentId: result.shiprocketShipmentId,
-        shiprocketError: undefined,
+        $unset: { shiprocketError: 1 },
       });
     } else {
       await Order.findByIdAndUpdate(orderId, {
