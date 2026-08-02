@@ -50,10 +50,11 @@ export const uploadImageToB2 = async (
       })),
     ];
 
-    // Watermarked variant — skipped for mockup scenes, which are marketing
-    // assets that should stay clean (see getWatermarkedUrl for the read side).
-    const isMockup = folder.startsWith('mockups');
-    if (!isMockup) {
+    // Watermarked variant — skipped for mockup scenes (marketing assets) and
+    // design-request references (private admin-only creative assets).
+    const skipWatermark =
+      folder.startsWith('mockups') || folder.startsWith('design-requests');
+    if (!skipWatermark) {
       const watermarkedBuffer = await applyWatermark(fileBuffer);
       uploads.push(
         s3Client.send(new PutObjectCommand({
