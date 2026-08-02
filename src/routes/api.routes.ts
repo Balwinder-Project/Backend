@@ -18,6 +18,7 @@ import dimensionTemplateRoutes from './dimensionTemplate.routes';
 import discountCampaignRoutes from './discountCampaign.routes';
 import designRequestRoutes from './designRequest.routes';
 import wishlistRoutes from './wishlist.routes';
+import contactRoutes from './contact.routes';
 
 const router = Router();
 
@@ -44,6 +45,7 @@ router.use(`${API_VERSION}/dimension-templates`, dimensionTemplateRoutes);
 router.use(`${API_VERSION}/discount-campaigns`, discountCampaignRoutes);
 router.use(`${API_VERSION}/design-requests`, designRequestRoutes);
 router.use(`${API_VERSION}/wishlist`, wishlistRoutes);
+router.use(`${API_VERSION}/contact`, contactRoutes);
 
 // API info endpoint
 router.get('/', (_req, res) => {
@@ -69,6 +71,7 @@ router.get('/', (_req, res) => {
       mockupTemplates: `${API_VERSION}/mockup-templates`,
       designRequests: `${API_VERSION}/design-requests`,
       wishlist: `${API_VERSION}/wishlist`,
+      contact: `${API_VERSION}/contact`,
     }
   });
 });
