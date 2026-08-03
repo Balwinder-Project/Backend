@@ -19,6 +19,21 @@ export function getWatermarkedUrl(url: string): string {
 }
 
 /**
+ * Whether a product's top-level category is Name Plates.
+ * Those products are served without the brand watermark on the public PDP.
+ * Matches slug `name-plates` and common name variants (Name Plate / Name Plates).
+ */
+export function isNamePlateCategory(category: unknown): boolean {
+  if (!category || typeof category !== 'object') return false;
+  const c = category as { slug?: string; name?: string };
+  const slug = (c.slug || '').toLowerCase().trim();
+  if (slug === 'name-plates' || slug === 'name-plate') return true;
+
+  const normalizedName = (c.name || '').toLowerCase().replace(/[\s_-]+/g, '');
+  return normalizedName === 'nameplates' || normalizedName === 'nameplate';
+}
+
+/**
  * Transform an array of image URLs
  */
 export function transformProductImages(images: string[], type: 'thumbnail' | 'watermarked'): string[] {
