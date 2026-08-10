@@ -71,8 +71,20 @@ export const listFonts = async (req: Request, res: Response): Promise<void> => {
       fonts: Array<{ id: string; family: string; url: string; format: string; key?: string }>;
     };
 
-    // Rewrite URLs to API proxy so browsers load fonts same-origin (CORS-safe)
-    const base = `${req.protocol}://${req.get('host')}/api/v1/fonts`;
+    // Prefer public API base (fixes https behind proxies / mixed-content)
+    const publicBase =
+      (process.env.PUBLIC_API_BASE_URL || process.env.API_PUBLIC_URL || '').replace(
+        /\/$/,
+        ''
+      );
+    const proto = (req.get('x-forwarded-proto') || req.protocol || 'http').split(',')[0].trim();
+    const host = (req.get('x-forwarded-host') || req.get('host') || '').split(',')[0].trim();
+    const base =
+      publicBase && publicBase.includes('/fonts')
+        ? publicBase
+        : publicBase
+          ? `${publicBase}/fonts`
+          : `${proto}://${host}/api/v1/fonts`;
     const fonts = (manifest.fonts || []).map((f) => ({
       id: f.id,
       family: f.family,
@@ -126,7 +138,20 @@ export const getFontsCss = async (req: Request, res: Response): Promise<void> =>
       fonts: Array<{ id: string; family: string; format: string }>;
     };
 
-    const base = `${req.protocol}://${req.get('host')}/api/v1/fonts`;
+    const publicBase =
+      (process.env.PUBLIC_API_BASE_URL || process.env.API_PUBLIC_URL || '').replace(
+        /\/$/,
+        ''
+      );
+    const proto = (req.get('x-forwarded-proto') || req.protocol || 'http').split(',')[0].trim();
+    const host = (req.get('x-forwarded-host') || req.get('host') || '').split(',')[0].trim();
+    const base =
+      publicBase && publicBase.includes('/fonts')
+        ? publicBase
+        : publicBase
+          ? `${publicBase}/fonts`
+          : `${proto}://${host}/api/v1/fonts`;
+
     const css = (manifest.fonts || [])
       .map((f) => {
         const family = String(f.family).replace(/'/g, "\\'");
@@ -136,7 +161,7 @@ export const getFontsCss = async (req: Request, res: Response): Promise<void> =>
           `  font-family: '${family}';`,
           `  src: url('${url}') format('${f.format || 'truetype'}');`,
           `  font-style: normal;`,
-          `  font-weight: 400 700;`,
+          `  font-weight: 100 900;`,
           `  font-display: swap;`,
           `}`,
         ].join('\n');
