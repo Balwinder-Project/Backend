@@ -14,7 +14,8 @@
     "seed:nameplate-subcategories": "ts-node src/scripts/seedNamePlateSubcategories.ts",
     "reconcile:razorpay-topup": "ts-node src/scripts/reconcileRazorpayTopup.ts",
     "backfill:watermarks": "ts-node src/scripts/backfillWatermarks.ts",
-    "clean:mockup-watermarks": "ts-node src/scripts/cleanMockupWatermarks.ts"
+    "clean:mockup-watermarks": "ts-node src/scripts/cleanMockupWatermarks.ts",
+    "upload:custom-fonts": "ts-node src/scripts/uploadCustomFonts.ts"
   },
   "keywords": [],
   "author": "",

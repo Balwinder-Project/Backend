@@ -14,7 +14,12 @@ import apiRouter from './routes/api.routes';
 const app: Application = express();
 
 // Middleware
-app.use(helmet()); // Security headers
+// Allow cross-origin font/CSS loading for live preview (admin + storefront)
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+  })
+);
 
 // CORS configuration
 const corsOptions = {

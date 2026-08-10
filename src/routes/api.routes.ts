@@ -19,6 +19,7 @@ import discountCampaignRoutes from './discountCampaign.routes';
 import designRequestRoutes from './designRequest.routes';
 import wishlistRoutes from './wishlist.routes';
 import contactRoutes from './contact.routes';
+import fontRoutes from './font.routes';
 
 const router = Router();
 
@@ -26,6 +27,7 @@ const router = Router();
 const API_VERSION = '/v1';
 
 // Mount routes
+router.use(`${API_VERSION}/fonts`, fontRoutes);
 router.use(`${API_VERSION}/users`, userRoutes);
 router.use(`${API_VERSION}/auth`, authRoutes);
 router.use(`${API_VERSION}/admin`, adminRoutes);
@@ -72,6 +74,7 @@ router.get('/', (_req, res) => {
       designRequests: `${API_VERSION}/design-requests`,
       wishlist: `${API_VERSION}/wishlist`,
       contact: `${API_VERSION}/contact`,
+      fonts: `${API_VERSION}/fonts`,
     }
   });
 });
