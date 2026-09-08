@@ -55,17 +55,14 @@ export const validateShippingCharge = async (req: Request, res: Response, next: 
       return;
     }
 
+    // If the client supplies a courier ID, validate that exact courier.
+    // Otherwise, match the displayed shipping amount to an available courier.
     const selected = courierCompanyId
       ? rates.find((rate) => String(rate.courier_company_id) === String(courierCompanyId))
-      : rates[0];
+      : rates.find((rate) => Math.abs(Number(rate.rate) - requestedCharge) <= 0.01);
 
     if (!selected) {
-      res.status(400).json({ success: false, message: 'Selected courier is no longer available. Please recalculate shipping.' });
-      return;
-    }
-
-    if (Math.abs(Number(selected.rate) - requestedCharge) > 0.01) {
-      res.status(409).json({ success: false, message: 'Shipping rate changed. Please recalculate shipping.' });
+      res.status(409).json({ success: false, message: 'Shipping rate changed. Please recalculate shipping before payment.' });
       return;
     }
 
