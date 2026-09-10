@@ -6,7 +6,8 @@ export interface INamePlateSize { id: string; label: string; width: number; heig
 export interface INamePlateSymbol { id: string; name: string; category: string; value: string; imageUrl?: string; active: boolean; }
 
 export interface INamePlateConfig extends Document {
-  productId: mongoose.Types.ObjectId;
+  productId?: mongoose.Types.ObjectId;
+  subCategoryId?: mongoose.Types.ObjectId;
   designs: INamePlateDesign[];
   finishes: INamePlateFinish[];
   sizes: INamePlateSize[];
@@ -20,7 +21,10 @@ export interface INamePlateConfig extends Document {
 }
 
 const configSchema = new Schema<INamePlateConfig>({
-  productId: { type: Schema.Types.ObjectId, ref: 'Product', required: true, unique: true, index: true },
+  // Product-level configs remain supported for the existing storefront path.
+  productId: { type: Schema.Types.ObjectId, ref: 'Product', unique: true, sparse: true, index: true },
+  // Trial/category-level configs are stored once for the Name Plates subcategory.
+  subCategoryId: { type: Schema.Types.ObjectId, ref: 'SubCategory', unique: true, sparse: true, index: true },
   designs: [{ id: String, name: String, previewImage: String, accent: String, active: { type: Boolean, default: true } }],
   finishes: [{ id: String, name: String, price: { type: Number, min: 0, default: 0 }, active: { type: Boolean, default: true } }],
   sizes: [{ id: String, label: String, width: Number, height: Number, price: { type: Number, min: 0, default: 0 }, active: { type: Boolean, default: true } }],
@@ -30,5 +34,10 @@ const configSchema = new Schema<INamePlateConfig>({
   customLayoutSurcharge: { type: Number, min: 0, default: 0 },
   isActive: { type: Boolean, default: true },
 }, { timestamps: true });
+
+configSchema.pre('validate', function (next) {
+  if (!this.productId && !this.subCategoryId) return next(new Error('Either productId or subCategoryId is required'));
+  next();
+});
 
 export default mongoose.model<INamePlateConfig>('NamePlateConfig', configSchema);
