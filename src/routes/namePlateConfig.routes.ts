@@ -10,12 +10,12 @@ import { authenticateUser, requireAnyAdminPermission } from '../middleware/auth.
 const router = Router();
 const canManage = requireAnyAdminPermission(['PRODUCT_EDITOR', 'OWNER']);
 
+// Category/subcategory-level design library. Keep these routes before /:productId.
+router.get('/subcategory/:subCategoryId', getSubCategoryNamePlateConfig);
+router.put('/subcategory/:subCategoryId', authenticateUser, canManage, upsertSubCategoryNamePlateConfig);
+
 // Public storefront product-level configuration read.
 router.get('/:productId', getNamePlateConfig);
 router.put('/:productId', authenticateUser, canManage, upsertNamePlateConfig);
-
-// Category/subcategory-level design library. Admin writes are protected.
-router.get('/subcategory/:subCategoryId', getSubCategoryNamePlateConfig);
-router.put('/subcategory/:subCategoryId', authenticateUser, canManage, upsertSubCategoryNamePlateConfig);
 
 export default router;
