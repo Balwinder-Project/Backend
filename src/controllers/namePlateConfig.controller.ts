@@ -39,12 +39,50 @@ export const getSubCategoryNamePlateConfig = async (req: Request, res: Response)
     const { subCategoryId } = req.params;
     if (!validId(subCategoryId)) { res.status(400).json({ success: false, message: 'Invalid subcategory ID' }); return; }
 
+    const subCategoryObjectId = new mongoose.Types.ObjectId(subCategoryId);
     const config = await NamePlateConfig.findOne({
-      subCategoryId: new mongoose.Types.ObjectId(subCategoryId),
+      subCategoryId: subCategoryObjectId,
       isActive: true,
     }).lean();
 
     res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+
+    // Preview-only diagnostic mode. It never exposes MONGODB_URI or credentials and lets us
+    // distinguish a query/filter problem from a persistence/database-target problem.
+    if (req.query.debug === '1') {
+      const allMatches = await NamePlateConfig.find({ subCategoryId: subCategoryObjectId })
+        .select('_id subCategoryId productId isActive designs finishes sizes symbols layouts basePrice customLayoutSurcharge createdAt updatedAt')
+        .lean();
+
+      res.status(200).json({
+        success: true,
+        data: config ?? null,
+        diagnostics: {
+          databaseName: mongoose.connection.db?.databaseName ?? null,
+          collectionName: NamePlateConfig.collection.name,
+          connectionState: mongoose.connection.readyState,
+          totalMatches: allMatches.length,
+          activeMatches: allMatches.filter((item: any) => item.isActive === true).length,
+          records: allMatches.map((item: any) => ({
+            _id: item._id,
+            subCategoryId: item.subCategoryId,
+            productId: item.productId ?? null,
+            isActive: item.isActive,
+            designs: Array.isArray(item.designs) ? item.designs.length : 0,
+            finishes: Array.isArray(item.finishes) ? item.finishes.length : 0,
+            sizes: Array.isArray(item.sizes) ? item.sizes.length : 0,
+            symbols: Array.isArray(item.symbols) ? item.symbols.length : 0,
+            layouts: Array.isArray(item.layouts) ? item.layouts.length : 0,
+            basePrice: item.basePrice,
+            customLayoutSurcharge: item.customLayoutSurcharge,
+            createdAt: item.createdAt,
+            updatedAt: item.updatedAt,
+          })),
+        },
+      });
+      return;
+    }
+
     res.status(200).json({ success: true, data: config ?? null });
   } catch (error: any) {
     res.status(500).json({ success: false, message: 'Failed to fetch name plate subcategory configuration', error: process.env.NODE_ENV === 'development' ? error.message : undefined });
