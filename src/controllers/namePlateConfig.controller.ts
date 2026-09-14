@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import NamePlateConfig from '../models/namePlateConfig.model';
+import SubCategory from '../models/subCategory.model';
 
 const validId = (id: string) => mongoose.isValidObjectId(id);
 
@@ -13,6 +14,37 @@ export const getNamePlateConfig = async (req: Request, res: Response): Promise<v
     res.status(200).json({ success: true, data: config ?? null });
   } catch (error: any) {
     res.status(500).json({ success: false, message: 'Failed to fetch name plate configuration', error: process.env.NODE_ENV === 'development' ? error.message : undefined });
+  }
+};
+
+// Public storefront fallback for the Metal Name Plates trial. It resolves the
+// preview subcategory by name, so the storefront can use the same configuration
+// that was saved from Manage Products without exposing internal IDs.
+export const getMetalNamePlateConfig = async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const subCategory = await SubCategory.findOne({
+      name: /^Metal Name Plates$/i,
+      isActive: true,
+    }).select('_id name').lean();
+
+    if (!subCategory) {
+      res.status(404).json({ success: false, message: 'Metal Name Plates subcategory not found' });
+      return;
+    }
+
+    const config = await NamePlateConfig.findOne({
+      subCategoryId: subCategory._id,
+      isActive: true,
+    }).lean();
+
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.status(200).json({
+      success: true,
+      data: config ?? null,
+      subCategoryId: subCategory._id,
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: 'Failed to fetch Metal Name Plate configuration', error: process.env.NODE_ENV === 'development' ? error.message : undefined });
   }
 };
 
@@ -97,8 +129,6 @@ export const upsertSubCategoryNamePlateConfig = async (req: Request, res: Respon
     delete payload.productId;
     payload.isActive = payload.isActive !== false;
 
-    // Atomic preview-only upsert. This avoids the previous delete/create race and
-    // guarantees that concurrent admin saves cannot remove each other's record.
     const persisted = await NamePlateConfig.findOneAndUpdate(
       { subCategoryId: subCategoryObjectId },
       { $set: payload },
@@ -111,18 +141,11 @@ export const upsertSubCategoryNamePlateConfig = async (req: Request, res: Respon
       }
     ).lean();
 
-    if (!persisted) {
-      throw new Error('Name plate configuration write returned no document');
-    }
+    if (!persisted) throw new Error('Name plate configuration write returned no document');
 
     const readBack = await NamePlateConfig.findById(persisted._id).lean();
-    if (!readBack) {
-      throw new Error(`Name plate configuration write succeeded but read-back failed (id ${persisted._id.toString()})`);
-    }
-
-    if (readBack.subCategoryId?.toString() !== subCategoryId) {
-      throw new Error(`Name plate configuration read-back has unexpected subCategoryId (id ${readBack._id.toString()})`);
-    }
+    if (!readBack) throw new Error(`Name plate configuration write succeeded but read-back failed (id ${persisted._id.toString()})`);
+    if (readBack.subCategoryId?.toString() !== subCategoryId) throw new Error(`Name plate configuration read-back has unexpected subCategoryId (id ${readBack._id.toString()})`);
 
     res.status(200).json({
       success: true,
