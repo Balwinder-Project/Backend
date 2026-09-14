@@ -97,30 +97,47 @@ export const upsertSubCategoryNamePlateConfig = async (req: Request, res: Respon
     delete payload.productId;
     payload.isActive = payload.isActive !== false;
 
-    // Preview-only deterministic persistence path. Remove any conflicting trial record first,
-    // then create a fresh document and read that exact _id back from MongoDB.
-    const deleted = await NamePlateConfig.deleteMany({ subCategoryId: subCategoryObjectId });
-    const created = await NamePlateConfig.create(payload);
-    const persisted = await NamePlateConfig.findById(created._id).lean();
+    // Atomic preview-only upsert. This avoids the previous delete/create race and
+    // guarantees that concurrent admin saves cannot remove each other's record.
+    const persisted = await NamePlateConfig.findOneAndUpdate(
+      { subCategoryId: subCategoryObjectId },
+      { $set: payload },
+      {
+        new: true,
+        upsert: true,
+        runValidators: true,
+        setDefaultsOnInsert: true,
+        writeConcern: { w: 'majority' },
+      }
+    ).lean();
 
     if (!persisted) {
-      throw new Error(`Name plate configuration write succeeded but read-back failed (created ${created._id.toString()}, deleted ${deleted.deletedCount})`);
+      throw new Error('Name plate configuration write returned no document');
     }
 
-    if (persisted.subCategoryId?.toString() !== subCategoryId) {
-      throw new Error(`Name plate configuration read-back has unexpected subCategoryId (created ${created._id.toString()})`);
+    const readBack = await NamePlateConfig.findById(persisted._id).lean();
+    if (!readBack) {
+      throw new Error(`Name plate configuration write succeeded but read-back failed (id ${persisted._id.toString()})`);
+    }
+
+    if (readBack.subCategoryId?.toString() !== subCategoryId) {
+      throw new Error(`Name plate configuration read-back has unexpected subCategoryId (id ${readBack._id.toString()})`);
     }
 
     res.status(200).json({
       success: true,
       message: 'Name plate subcategory configuration saved',
-      data: persisted,
+      data: readBack,
       diagnostics: process.env.NODE_ENV === 'development' ? {
         databaseName: mongoose.connection.db?.databaseName ?? null,
         collectionName: NamePlateConfig.collection.name,
-        deletedCount: deleted.deletedCount,
-        createdId: created._id,
-        readBackId: persisted._id,
+        persistedId: readBack._id,
+        subCategoryId: readBack.subCategoryId,
+        isActive: readBack.isActive,
+        designs: Array.isArray(readBack.designs) ? readBack.designs.length : 0,
+        finishes: Array.isArray(readBack.finishes) ? readBack.finishes.length : 0,
+        sizes: Array.isArray(readBack.sizes) ? readBack.sizes.length : 0,
+        symbols: Array.isArray(readBack.symbols) ? readBack.symbols.length : 0,
       } : undefined,
     });
   } catch (error: any) {
