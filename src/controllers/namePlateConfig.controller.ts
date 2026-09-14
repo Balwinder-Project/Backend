@@ -45,11 +45,20 @@ export const upsertSubCategoryNamePlateConfig = async (req: Request, res: Respon
   try {
     const { subCategoryId } = req.params;
     if (!validId(subCategoryId)) { res.status(400).json({ success: false, message: 'Invalid subcategory ID' }); return; }
-    const config = await NamePlateConfig.findOneAndUpdate(
-      { subCategoryId },
-      { $set: { ...req.body, subCategoryId, productId: undefined } },
-      { new: true, upsert: true, runValidators: true, setDefaultsOnInsert: true }
-    );
+
+    const payload = { ...req.body, subCategoryId };
+    delete payload.productId;
+
+    const existing = await NamePlateConfig.findOne({ subCategoryId });
+    let config;
+
+    if (existing) {
+      existing.set(payload);
+      config = await existing.save();
+    } else {
+      config = await NamePlateConfig.create(payload);
+    }
+
     res.status(200).json({ success: true, message: 'Name plate subcategory configuration saved', data: config });
   } catch (error: any) {
     res.status(400).json({ success: false, message: 'Failed to save name plate subcategory configuration', error: process.env.NODE_ENV === 'development' ? error.message : undefined });
