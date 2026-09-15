@@ -1,7 +1,7 @@
 import mongoose, { Document, Schema } from 'mongoose';
 
 export interface INamePlateDesign { id: string; name: string; previewImage?: string; accent?: string; active: boolean; }
-export interface INamePlateFinish { id: string; name: string; price: number; active: boolean; }
+export interface INamePlateFinish { id: string; name: string; price: number; imageUrl?: string; active: boolean; }
 export interface INamePlateSize { id: string; label: string; width: number; height: number; price: number; active: boolean; }
 export interface INamePlateSymbol { id: string; name: string; category: string; value: string; imageUrl?: string; active: boolean; }
 export interface INamePlatePreviewSettings {
@@ -30,7 +30,7 @@ const configSchema = new Schema<INamePlateConfig>({
   productId: { type: Schema.Types.ObjectId, ref: 'Product', unique: true, sparse: true, index: true },
   subCategoryId: { type: Schema.Types.ObjectId, ref: 'SubCategory', unique: true, sparse: true, index: true },
   designs: [{ id: String, name: String, previewImage: String, accent: String, active: { type: Boolean, default: true } }],
-  finishes: [{ id: String, name: String, price: { type: Number, min: 0, default: 0 }, active: { type: Boolean, default: true } }],
+  finishes: [{ id: String, name: String, price: { type: Number, min: 0, default: 0 }, imageUrl: String, active: { type: Boolean, default: true } }],
   sizes: [{ id: String, label: String, width: Number, height: Number, price: { type: Number, min: 0, default: 0 }, active: { type: Boolean, default: true } }],
   layouts: { type: [String], default: ['house-symbol', 'house-name-symbol', 'name-symbol', 'house-only', 'custom'] },
   symbols: [{ id: String, name: String, category: String, value: String, imageUrl: String, active: { type: Boolean, default: true } }],
