@@ -20,6 +20,7 @@ import designRequestRoutes from './designRequest.routes';
 import wishlistRoutes from './wishlist.routes';
 import contactRoutes from './contact.routes';
 import fontRoutes from './font.routes';
+import symbolLibraryRoutes from './symbolLibrary.routes';
 
 const router = Router();
 
@@ -48,6 +49,7 @@ router.use(`${API_VERSION}/discount-campaigns`, discountCampaignRoutes);
 router.use(`${API_VERSION}/design-requests`, designRequestRoutes);
 router.use(`${API_VERSION}/wishlist`, wishlistRoutes);
 router.use(`${API_VERSION}/contact`, contactRoutes);
+router.use(`${API_VERSION}/symbols`, symbolLibraryRoutes);
 
 // API info endpoint
 router.get('/', (_req, res) => {
@@ -75,6 +77,7 @@ router.get('/', (_req, res) => {
       wishlist: `${API_VERSION}/wishlist`,
       contact: `${API_VERSION}/contact`,
       fonts: `${API_VERSION}/fonts`,
+      symbols: `${API_VERSION}/symbols`,
     }
   });
 });
