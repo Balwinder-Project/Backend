@@ -4,6 +4,11 @@ export interface INamePlateDesign { id: string; name: string; previewImage?: str
 export interface INamePlateFinish { id: string; name: string; price: number; active: boolean; }
 export interface INamePlateSize { id: string; label: string; width: number; height: number; price: number; active: boolean; }
 export interface INamePlateSymbol { id: string; name: string; category: string; value: string; imageUrl?: string; active: boolean; }
+export interface INamePlatePreviewSettings {
+  title?: string; stockLabel?: string; subtitle?: string; oldPrice?: number; rating?: number;
+  reviewCount?: number; soldCount?: string; description?: string; heroImage?: string;
+  features?: Array<[string,string,string]>;
+}
 
 export interface INamePlateConfig extends Document {
   productId?: mongoose.Types.ObjectId;
@@ -16,14 +21,13 @@ export interface INamePlateConfig extends Document {
   basePrice: number;
   customLayoutSurcharge: number;
   isActive: boolean;
+  previewSettings?: INamePlatePreviewSettings;
   createdAt: Date;
   updatedAt: Date;
 }
 
 const configSchema = new Schema<INamePlateConfig>({
-  // Product-level configs remain supported for the existing storefront path.
   productId: { type: Schema.Types.ObjectId, ref: 'Product', unique: true, sparse: true, index: true },
-  // Trial/category-level configs are stored once for the Name Plates subcategory.
   subCategoryId: { type: Schema.Types.ObjectId, ref: 'SubCategory', unique: true, sparse: true, index: true },
   designs: [{ id: String, name: String, previewImage: String, accent: String, active: { type: Boolean, default: true } }],
   finishes: [{ id: String, name: String, price: { type: Number, min: 0, default: 0 }, active: { type: Boolean, default: true } }],
@@ -33,6 +37,7 @@ const configSchema = new Schema<INamePlateConfig>({
   basePrice: { type: Number, min: 0, default: 0 },
   customLayoutSurcharge: { type: Number, min: 0, default: 0 },
   isActive: { type: Boolean, default: true },
+  previewSettings: { type: Schema.Types.Mixed, default: {} },
 }, { timestamps: true });
 
 configSchema.pre('validate', function (next) {
