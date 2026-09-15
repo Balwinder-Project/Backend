@@ -10,8 +10,10 @@ import { authenticateUser, requireAnyAdminPermission } from '../middleware/auth.
 const router = Router();
 const canManage = requireAnyAdminPermission(['PRODUCT_EDITOR', 'OWNER']);
 
-// Public storefront read; admin can request inactive items with auth.
+// Public storefront read exposes active symbols only.
 router.get('/', getSymbolLibrary);
+// Admin catalogue read may include inactive symbols.
+router.get('/manage', authenticateUser, canManage, getSymbolLibrary);
 router.post('/', authenticateUser, canManage, createSymbolLibraryItem);
 router.put('/:id', authenticateUser, canManage, updateSymbolLibraryItem);
 router.delete('/:id', authenticateUser, canManage, deleteSymbolLibraryItem);
