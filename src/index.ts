@@ -5,12 +5,14 @@ dotenv.config();
 
 import app from './app';
 import { connectDatabase, disconnectDatabase } from './config/database';
+import { bootstrapNamePlateTrialData } from './utils/namePlateTrialBootstrap';
 
 const PORT = process.env.PORT || 9000;
 
 const startServer = async (): Promise<void> => {
   try {
     await connectDatabase();
+    await bootstrapNamePlateTrialData();
 
     const server = app.listen(PORT, () => {
       console.log(`🚀 Server is running on port ${PORT}`);
