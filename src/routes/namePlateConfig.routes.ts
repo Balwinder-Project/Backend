@@ -5,6 +5,7 @@ import {
   upsertNamePlateConfig,
   getSubCategoryNamePlateConfig,
   upsertSubCategoryNamePlateConfig,
+  findReferenceFontsWithAI,
 } from '../controllers/namePlateConfig.controller';
 import { authenticateUser, requireAnyAdminPermission } from '../middleware/auth.middleware';
 
@@ -15,6 +16,8 @@ const canManage = requireAnyAdminPermission(['PRODUCT_EDITOR', 'OWNER']);
 router.get('/metal', getMetalNamePlateConfig);
 
 // Category/subcategory-level design library. Keep these routes before /:productId.
+router.post('/ai/find-reference-fonts', authenticateUser, canManage, findReferenceFontsWithAI);
+
 router.get('/subcategory/:subCategoryId', getSubCategoryNamePlateConfig);
 router.put('/subcategory/:subCategoryId', authenticateUser, canManage, upsertSubCategoryNamePlateConfig);
 
