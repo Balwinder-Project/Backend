@@ -1,6 +1,7 @@
 import mongoose, { Document, Schema } from 'mongoose';
 
-export interface INamePlateDesign { id: string; name: string; previewImage?: string; templateImage?: string; accent?: string; active: boolean; }
+export interface INamePlateReferenceFont { id: string; element: string; fontName: string; }
+export interface INamePlateDesign { id: string; name: string; previewImage?: string; templateImage?: string; referenceFont?: string; referenceFonts?: INamePlateReferenceFont[]; baseWidth?: number; baseHeight?: number; accent?: string; active: boolean; }
 export interface INamePlateFinish { id: string; name: string; price: number; imageUrl?: string; active: boolean; }
 export interface INamePlateSize { id: string; label: string; width: number; height: number; price: number; active: boolean; }
 export interface INamePlateSymbol { id: string; name: string; category: string; value: string; imageUrl?: string; active: boolean; }
@@ -34,6 +35,10 @@ const configSchema = new Schema<INamePlateConfig>({
     name: String,
     previewImage: String,
     templateImage: String,
+    referenceFont: String,
+    referenceFonts: [{ id: String, element: String, fontName: String }],
+    baseWidth: { type: Number, min: 0.1 },
+    baseHeight: { type: Number, min: 0.1 },
     accent: String,
     active: { type: Boolean, default: true },
   }],
