@@ -40,7 +40,7 @@ export const findReferenceFontsWithAI = async (req: Request, res: Response): Pro
     }
 
     const imageUrl = String(req.body?.imageUrl || '').trim();
-    if (!/^https?:\\/\\//i.test(imageUrl)) {
+    if (!/^https?:\/\//i.test(imageUrl)) {
       res.status(400).json({ success: false, message: 'A public reference image URL is required for AI Font Finder.' });
       return;
     }
