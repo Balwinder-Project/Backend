@@ -5,6 +5,125 @@ import SubCategory from '../models/subCategory.model';
 
 const validId = (id: string) => mongoose.isValidObjectId(id);
 
+
+
+const getHostedFontFamilies = async (): Promise<string[]> => {
+  const { GetObjectCommand } = await import('@aws-sdk/client-s3');
+  const { s3Client, B2_BUCKET_NAME } = await import('../config/b2');
+  const result = await s3Client.send(new GetObjectCommand({
+    Bucket: B2_BUCKET_NAME,
+    Key: 'balwinder/fonts/manifest.json',
+  }));
+  const raw = await result.Body?.transformToString('utf-8');
+  if (!raw) return [];
+  const manifest = JSON.parse(raw) as { fonts?: Array<{ family?: string }> };
+  return Array.from(new Set((manifest.fonts || []).map((f) => String(f.family || '').trim()).filter(Boolean)));
+};
+
+const extractOpenAIText = (payload: any): string => {
+  if (typeof payload?.output_text === 'string') return payload.output_text;
+  const chunks: string[] = [];
+  for (const item of payload?.output || []) {
+    for (const content of item?.content || []) {
+      if (typeof content?.text === 'string') chunks.push(content.text);
+    }
+  }
+  return chunks.join('\n');
+};
+
+export const findReferenceFontsWithAI = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      res.status(503).json({ success: false, message: 'AI Font Finder is not configured. Add OPENAI_API_KEY to the Backend environment.' });
+      return;
+    }
+
+    const imageUrl = String(req.body?.imageUrl || '').trim();
+    if (!/^https?:\\/\\//i.test(imageUrl)) {
+      res.status(400).json({ success: false, message: 'A public reference image URL is required for AI Font Finder.' });
+      return;
+    }
+
+    const fontFamilies = await getHostedFontFamilies();
+    if (!fontFamilies.length) {
+      res.status(503).json({ success: false, message: 'Hosted font catalog is empty. Upload/build the custom font manifest first.' });
+      return;
+    }
+
+    const prompt = [
+      'You are an expert typography and font-identification assistant for a name-plate design editor.',
+      'Analyze the supplied reference plate image and identify every visually distinct TEXT / LETTERING style that an admin should recreate as an editable text layer.',
+      'Do not include decorative icons, arrows, borders, screws, logos, or purely graphical symbols unless they are clearly text characters.',
+      'For each text style, identify the visible text if readable and select the CLOSEST matching font family from the supplied hosted-font catalog.',
+      'You MUST choose fontName from the catalog exactly as written. Never invent a font family that is not in the catalog.',
+      'If the exact font is uncertain, choose the closest visual match and lower confidence. Font identification from an image is approximate.',
+      'Return ONLY valid JSON in this exact shape: {"fonts":[{"element":"...","fontName":"...","confidence":0.0,"reason":"..."}]}',
+      'Keep confidence between 0 and 1. Prefer 1 row per distinct font/style, not one row per repeated word.',
+      '',
+      'HOSTED FONT CATALOG:',
+      ...fontFamilies.map((name, index) => `${index + 1}. ${name}`),
+    ].join('\n');
+
+    const aiResponse = await fetch('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: process.env.OPENAI_FONT_MODEL || 'gpt-5.6-luna',
+        input: [{
+          role: 'user',
+          content: [
+            { type: 'input_text', text: prompt },
+            { type: 'input_image', image_url: imageUrl, detail: 'high' },
+          ],
+        }],
+      }),
+    });
+
+    const payload = await aiResponse.json();
+    if (!aiResponse.ok) {
+      console.error('AI Font Finder OpenAI error:', payload);
+      res.status(502).json({ success: false, message: 'AI Font Finder could not analyze the reference image.' });
+      return;
+    }
+
+    const rawText = extractOpenAIText(payload).trim();
+    const jsonText = rawText.replace(/^\`\`\`json\s*/i, '').replace(/^\`\`\`\s*/i, '').replace(/\s*\`\`\`$/i, '').trim();
+    let parsed: any;
+    try {
+      parsed = JSON.parse(jsonText);
+    } catch {
+      console.error('AI Font Finder returned non-JSON:', rawText);
+      res.status(502).json({ success: false, message: 'AI Font Finder returned an unreadable result.' });
+      return;
+    }
+
+    const allowed = new Set(fontFamilies.map((name) => name.toLowerCase()));
+    const fonts = Array.isArray(parsed?.fonts)
+      ? parsed.fonts
+        .map((item: any) => ({
+          id: `ai-font-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          element: String(item?.element || '').trim(),
+          fontName: String(item?.fontName || '').trim(),
+          confidence: Math.max(0, Math.min(1, Number(item?.confidence) || 0)),
+          reason: String(item?.reason || '').trim(),
+        }))
+        .filter((item: any) => item.element && allowed.has(item.fontName.toLowerCase()))
+      : [];
+
+    res.status(200).json({
+      success: true,
+      data: { fonts, model: process.env.OPENAI_FONT_MODEL || 'gpt-5.6-luna' },
+    });
+  } catch (error: any) {
+    console.error('findReferenceFontsWithAI error:', error);
+    res.status(500).json({ success: false, message: 'AI Font Finder failed. Please try again.' });
+  }
+};
+
 export const getNamePlateConfig = async (req: Request, res: Response): Promise<void> => {
   try {
     const { productId } = req.params;
