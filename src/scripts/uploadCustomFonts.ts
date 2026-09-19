@@ -4,6 +4,7 @@
  * Usage:
  *   FONT_SOURCE_DIR=~/Downloads/Fonts npx ts-node src/scripts/uploadCustomFonts.ts
  *   npx ts-node src/scripts/uploadCustomFonts.ts --dry-run
+ *   FONT_ZIP_PATH=~/Downloads/Fonts.zip npx ts-node src/scripts/uploadCustomFonts.ts
  *   npx ts-node src/scripts/uploadCustomFonts.ts --limit=50   # smoke test
  *
  * Writes:
@@ -28,6 +29,7 @@ const dryRun = process.argv.includes('--dry-run');
 const limitArg = process.argv.find((a) => a.startsWith('--limit='));
 const limit = limitArg ? parseInt(limitArg.split('=')[1], 10) : 0;
 
+const zipPath = process.env.FONT_ZIP_PATH || '';
 const sourceDir =
   process.env.FONT_SOURCE_DIR ||
   path.join(os.homedir(), 'Downloads', 'Fonts');
@@ -200,17 +202,56 @@ function buildCss(fonts: ManifestFont[]): string {
 }
 
 function listFontFiles(dir: string): string[] {
-  const entries = fs.readdirSync(dir, { withFileTypes: true });
   const files: string[] = [];
-  for (const ent of entries) {
-    if (!ent.isFile()) continue;
-    const ext = path.extname(ent.name).toLowerCase();
-    if (!USABLE_EXT.has(ext)) continue;
-    // Skip macOS junk
-    if (ent.name.startsWith('._') || ent.name.startsWith('.')) continue;
-    files.push(path.join(dir, ent.name));
+
+  function walk(current: string): void {
+    for (const ent of fs.readdirSync(current, { withFileTypes: true })) {
+      if (ent.name.startsWith('._') || ent.name.startsWith('.')) continue;
+      const fullPath = path.join(current, ent.name);
+      if (ent.isDirectory()) {
+        walk(fullPath);
+        continue;
+      }
+      if (!ent.isFile()) continue;
+      const ext = path.extname(ent.name).toLowerCase();
+      if (!USABLE_EXT.has(ext)) continue;
+      files.push(fullPath);
+    }
   }
+
+  walk(dir);
   return files.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+}
+
+function prepareSourceDir(): { dir: string; cleanup: () => void } {
+  if (!zipPath) {
+    return { dir: sourceDir, cleanup: () => undefined };
+  }
+
+  if (!fs.existsSync(zipPath)) {
+    throw new Error(`Font ZIP not found: ${zipPath}`);
+  }
+
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bnd-fonts-'));
+  try {
+    execFileSync('unzip', ['-q', zipPath, '-d', tempDir], { stdio: 'inherit' });
+  } catch (err) {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+    throw new Error(`Failed to extract font ZIP ${zipPath}: ${String(err)}`);
+  }
+
+  const candidates = fs
+    .readdirSync(tempDir, { withFileTypes: true })
+    .filter((ent) => ent.isDirectory())
+    .map((ent) => path.join(tempDir, ent.name));
+
+  // ZIPs such as Fonts.zip normally contain a single top-level Fonts/ directory.
+  // If there is exactly one directory, use it; otherwise scan the extraction root.
+  const dir = candidates.length === 1 ? candidates[0] : tempDir;
+  return {
+    dir,
+    cleanup: () => fs.rmSync(tempDir, { recursive: true, force: true }),
+  };
 }
 
 async function mapPool<T, R>(
@@ -235,14 +276,22 @@ async function main() {
   if (!B2_BUCKET_NAME || !B2_PUBLIC_URL) {
     throw new Error('B2_BUCKET_NAME / B2_PUBLIC_URL missing from env');
   }
-  if (!fs.existsSync(sourceDir)) {
-    throw new Error(`Font source directory not found: ${sourceDir}`);
+  const prepared = prepareSourceDir();
+  if (!fs.existsSync(prepared.dir)) {
+    prepared.cleanup();
+    throw new Error(`Font source directory not found: ${prepared.dir}`);
   }
 
-  let files = listFontFiles(sourceDir);
+  let files: string[];
+  try {
+    files = listFontFiles(prepared.dir);
+  } catch (err) {
+    prepared.cleanup();
+    throw err;
+  }
   if (limit > 0) files = files.slice(0, limit);
 
-  console.log(`Source: ${sourceDir}`);
+  console.log(zipPath ? `Source ZIP: ${zipPath}` : `Source: ${prepared.dir}`);
   console.log(`Bucket: ${B2_BUCKET_NAME}`);
   console.log(`Public: ${B2_PUBLIC_URL}/${PREFIX}/`);
   console.log(`Usable font files found: ${files.length}`);
@@ -334,6 +383,7 @@ async function main() {
   console.log(`  Manifest: ${manifestUrl}`);
   console.log(`  CSS:      ${cssUrl}`);
   console.log(`  Total CSS size: ${(Buffer.byteLength(css) / 1024).toFixed(0)} KB`);
+  prepared.cleanup();
 }
 
 main().catch((err) => {
