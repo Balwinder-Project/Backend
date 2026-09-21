@@ -20,13 +20,11 @@ import designRequestRoutes from './designRequest.routes';
 import wishlistRoutes from './wishlist.routes';
 import contactRoutes from './contact.routes';
 import fontRoutes from './font.routes';
+import namePlateConfigRoutes from './namePlateConfig.routes';
 
 const router = Router();
-
-// API version prefix
 const API_VERSION = '/v1';
 
-// Mount routes
 router.use(`${API_VERSION}/fonts`, fontRoutes);
 router.use(`${API_VERSION}/users`, userRoutes);
 router.use(`${API_VERSION}/auth`, authRoutes);
@@ -48,33 +46,23 @@ router.use(`${API_VERSION}/discount-campaigns`, discountCampaignRoutes);
 router.use(`${API_VERSION}/design-requests`, designRequestRoutes);
 router.use(`${API_VERSION}/wishlist`, wishlistRoutes);
 router.use(`${API_VERSION}/contact`, contactRoutes);
+router.use(`${API_VERSION}/name-plate-config`, namePlateConfigRoutes);
 
-// API info endpoint
 router.get('/', (_req, res) => {
   res.json({
     success: true,
     message: 'API is running',
     version: 'v1',
     endpoints: {
-      users: `${API_VERSION}/users`,
-      auth: `${API_VERSION}/auth`,
-      admin: `${API_VERSION}/admin`,
-      retailers: `${API_VERSION}/retailers`,
-      categories: `${API_VERSION}/categories`,
-      subCategories: `${API_VERSION}/sub-categories`,
-      tags: `${API_VERSION}/tags`,
-      products: `${API_VERSION}/products`,
-      wallets: `${API_VERSION}/wallets`,
-      upload: `${API_VERSION}/upload`,
-      addresses: `${API_VERSION}/addresses`,
-      orders: `${API_VERSION}/orders`,
-      qc: `${API_VERSION}/qc`,
-      heroSlides: `${API_VERSION}/hero-slides`,
-      mockupTemplates: `${API_VERSION}/mockup-templates`,
-      designRequests: `${API_VERSION}/design-requests`,
-      wishlist: `${API_VERSION}/wishlist`,
-      contact: `${API_VERSION}/contact`,
-      fonts: `${API_VERSION}/fonts`,
+      users: `${API_VERSION}/users`, auth: `${API_VERSION}/auth`, admin: `${API_VERSION}/admin`,
+      retailers: `${API_VERSION}/retailers`, categories: `${API_VERSION}/categories`,
+      subCategories: `${API_VERSION}/sub-categories`, tags: `${API_VERSION}/tags`,
+      products: `${API_VERSION}/products`, wallets: `${API_VERSION}/wallets`, upload: `${API_VERSION}/upload`,
+      addresses: `${API_VERSION}/addresses`, orders: `${API_VERSION}/orders`, qc: `${API_VERSION}/qc`,
+      heroSlides: `${API_VERSION}/hero-slides`, mockupTemplates: `${API_VERSION}/mockup-templates`,
+      designRequests: `${API_VERSION}/design-requests`, wishlist: `${API_VERSION}/wishlist`,
+      contact: `${API_VERSION}/contact`, fonts: `${API_VERSION}/fonts`,
+      namePlateConfig: `${API_VERSION}/name-plate-config`,
     }
   });
 });
