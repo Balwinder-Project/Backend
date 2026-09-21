@@ -6,6 +6,7 @@ import {
   getSubCategoryNamePlateConfig,
   upsertSubCategoryNamePlateConfig,
   findReferenceFontsWithAI,
+  analyzeFixedArtworkWithAI,
 } from '../controllers/namePlateConfig.controller';
 import { authenticateUser, requireAnyAdminPermission } from '../middleware/auth.middleware';
 
@@ -17,6 +18,7 @@ router.get('/metal', getMetalNamePlateConfig);
 
 // Category/subcategory-level design library. Keep these routes before /:productId.
 router.post('/ai/find-reference-fonts', authenticateUser, canManage, findReferenceFontsWithAI);
+router.post('/ai/analyze-fixed-artwork', authenticateUser, canManage, analyzeFixedArtworkWithAI);
 
 router.get('/subcategory/:subCategoryId', getSubCategoryNamePlateConfig);
 router.put('/subcategory/:subCategoryId', authenticateUser, canManage, upsertSubCategoryNamePlateConfig);
