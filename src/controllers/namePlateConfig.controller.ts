@@ -61,7 +61,7 @@ export const findReferenceFontsWithAI = async (req: Request, res: Response): Pro
       'You MUST choose fontName from the catalog exactly as written. Never invent a font family that is not in the catalog.',
       'If the exact font is uncertain, choose the closest visual match and lower confidence. Font identification from an image is approximate.',
       'Return ONLY valid JSON in this exact shape: {"fonts":[{"element":"...","fontName":"...","confidence":0.0,"reason":"..."}]}',
-      'Keep confidence between 0 and 1. Return up to 12 meaningful text styles/blocks. Do not return rows for decorative-only artwork.'
+      'Keep confidence between 0 and 1. Return up to 12 meaningful text styles/blocks. Do not return rows for decorative-only artwork.',
       '',
       'HOSTED FONT CATALOG:',
       ...fontFamilies.map((name, index) => `${index + 1}. ${name}`),
