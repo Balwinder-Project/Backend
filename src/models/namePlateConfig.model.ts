@@ -11,6 +11,7 @@ export interface INamePlatePreviewSettings {
   title?: string; stockLabel?: string; subtitle?: string; oldPrice?: number; rating?: number;
   reviewCount?: number; soldCount?: string; description?: string; heroImage?: string;
   features?: Array<[string,string,string]>;
+  ratePerSqIn?: number; customSizeWhatsApp?: string; plateColors?: string[]; frontColors?: string[]; fontColors?: string[]; symbolColors?: string[];
 }
 
 export interface INamePlateConfig extends Document {
