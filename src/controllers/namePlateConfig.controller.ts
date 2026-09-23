@@ -87,7 +87,11 @@ export const findReferenceFontsWithAI = async (req: Request, res: Response): Pro
 
     const payload = await aiResponse.json();
     if (!aiResponse.ok) {
-      console.error('AI Font Finder OpenAI error:', payload);
+      console.error('=== OPENAI FONT FINDER ERROR ===');
+      console.error('status:', aiResponse.status);
+      console.error('statusText:', aiResponse.statusText);
+      console.error('payload:', JSON.stringify(payload));
+      console.error('=== END OPENAI FONT FINDER ERROR ===');
       res.status(502).json({ success: false, message: 'AI Font Finder could not analyze the reference image.' });
       return;
     }
