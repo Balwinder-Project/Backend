@@ -19,6 +19,7 @@ import discountCampaignRoutes from './discountCampaign.routes';
 import designRequestRoutes from './designRequest.routes';
 import wishlistRoutes from './wishlist.routes';
 import contactRoutes from './contact.routes';
+import customerNameplateUploadRoutes from './customerNameplateUpload.routes';
 import fontRoutes from './font.routes';
 
 const router = Router();
@@ -48,6 +49,7 @@ router.use(`${API_VERSION}/discount-campaigns`, discountCampaignRoutes);
 router.use(`${API_VERSION}/design-requests`, designRequestRoutes);
 router.use(`${API_VERSION}/wishlist`, wishlistRoutes);
 router.use(`${API_VERSION}/contact`, contactRoutes);
+router.use(`${API_VERSION}/customer-nameplate-upload`, customerNameplateUploadRoutes);
 
 // API info endpoint
 router.get('/', (_req, res) => {
@@ -74,6 +76,7 @@ router.get('/', (_req, res) => {
       designRequests: `${API_VERSION}/design-requests`,
       wishlist: `${API_VERSION}/wishlist`,
       contact: `${API_VERSION}/contact`,
+      customerNameplateUpload: `${API_VERSION}/customer-nameplate-upload`,
       fonts: `${API_VERSION}/fonts`,
     }
   });
