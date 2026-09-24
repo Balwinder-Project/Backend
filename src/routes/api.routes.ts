@@ -22,6 +22,7 @@ import contactRoutes from './contact.routes';
 import fontRoutes from './font.routes';
 import namePlateConfigRoutes from './namePlateConfig.routes';
 import customerNameplateUploadRoutes from './customerNameplateUpload.routes';
+import symbolLibraryRoutes from './symbolLibrary.routes';
 
 const router = Router();
 const API_VERSION = '/v1';
@@ -49,6 +50,7 @@ router.use(`${API_VERSION}/wishlist`, wishlistRoutes);
 router.use(`${API_VERSION}/contact`, contactRoutes);
 router.use(`${API_VERSION}/name-plate-config`, namePlateConfigRoutes);
 router.use(`${API_VERSION}/customer-nameplate-upload`, customerNameplateUploadRoutes);
+router.use(`${API_VERSION}/symbols`, symbolLibraryRoutes);
 
 router.get('/', (_req, res) => {
   res.json({
