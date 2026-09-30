@@ -16,7 +16,7 @@ const upload = multer({
   },
 }).single('design');
 
-router.post('/', (req: Request, res: Response, next) => {
+router.post('/', (req: Request, res: Response) => {
   upload(req, res, async (err) => {
     if (err instanceof multer.MulterError) {
       const message =
