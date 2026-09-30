@@ -27,7 +27,14 @@ export const INDIAN_STATES = [
   'Uttar Pradesh',
   'Uttarakhand',
   'West Bengal',
-  'Delhi'
+  'Andaman & Nicobar Islands',
+  'Chandigarh',
+  'Dadra & Nagar Haveli and Daman & Diu',
+  'Delhi',
+  'Jammu & Kashmir',
+  'Ladakh',
+  'Lakshadweep',
+  'Puducherry'
 ] as const;
 
 export type IndianState = typeof INDIAN_STATES[number];
