@@ -136,6 +136,58 @@ export class ProductService {
   }
 
   /**
+   * Bulk update pricing for an explicitly targeted product group.
+   * Supports categoryId and/or SKU prefix. Both are combined with AND
+   * when supplied, so callers can safely narrow the scope.
+   */
+  static async bulkUpdatePricing(data: {
+    categoryId?: string;
+    skuPrefix?: string;
+    price?: number;
+    normalUserPricing?: { minQuantity: number; price: number }[];
+    retailerPricing?: {
+      minimumOrderQuantity?: number;
+      slabs: { minQuantity: number; price: number }[];
+    };
+  }): Promise<{
+    matchedCount: number;
+    modifiedCount: number;
+    filter: Record<string, unknown>;
+  }> {
+    const filter: Record<string, unknown> = {};
+
+    if (data.categoryId) {
+      const categoryExists = await this.checkCategoryExists(data.categoryId);
+      if (!categoryExists) {
+        throw new Error('Category not found');
+      }
+      filter.category = data.categoryId;
+    }
+
+    if (data.skuPrefix) {
+      const safePrefix = escapeRegex(data.skuPrefix);
+      filter.sku = { $regex: `^${safePrefix}`, $options: 'i' };
+    }
+
+    const update: Record<string, unknown> = {};
+    if (data.price !== undefined) update.price = data.price;
+    if (data.normalUserPricing !== undefined) update.normalUserPricing = data.normalUserPricing;
+    if (data.retailerPricing !== undefined) update.retailerPricing = data.retailerPricing;
+
+    const result = await Product.updateMany(
+      filter,
+      { $set: update },
+      { runValidators: true }
+    );
+
+    return {
+      matchedCount: result.matchedCount,
+      modifiedCount: result.modifiedCount,
+      filter,
+    };
+  }
+
+  /**
    * Update product
    */
   static async updateProduct(id: string, data: Partial<IProduct>): Promise<IProduct | null> {
