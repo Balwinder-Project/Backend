@@ -160,7 +160,7 @@ export class ProductService {
 
     if (data.skuPrefix) {
       const safePrefix = escapeRegex(data.skuPrefix);
-      filter.sku = { $regex: `^${safePrefix}`, $options: 'i' };
+      filter.sku = { $regex: safePrefix, $options: 'i' };
     }
 
     const limit = Math.min(Math.max(data.limit || 20, 1), 50);
