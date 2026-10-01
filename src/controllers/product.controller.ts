@@ -315,6 +315,41 @@ export const getProductById = async (req: Request, res: Response): Promise<void>
  * Only the base product price and shared user/retailer slabs are changed.
  * Per-retailer special pricing is never overwritten by this endpoint.
  */
+export const previewBulkProductPricing = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { categoryId, skuPrefix, limit } = req.body;
+
+    if (!categoryId && !skuPrefix) {
+      res.status(400).json({ success: false, message: 'At least one target is required: categoryId or skuPrefix' });
+      return;
+    }
+
+    if (skuPrefix !== undefined && (typeof skuPrefix !== 'string' || !skuPrefix.trim())) {
+      res.status(400).json({ success: false, message: 'skuPrefix must be a non-empty string' });
+      return;
+    }
+
+    if (!hasAdminPermission(req.user, 'OWNER')) {
+      res.status(403).json({ success: false, message: 'Bulk pricing preview requires OWNER permission' });
+      return;
+    }
+
+    const result = await ProductService.previewBulkPricing({
+      categoryId,
+      skuPrefix: typeof skuPrefix === 'string' ? skuPrefix.trim() : undefined,
+      limit: typeof limit === 'number' ? limit : undefined,
+    });
+
+    res.status(200).json({ success: true, data: result });
+  } catch (error: any) {
+    console.error('Error previewing bulk product pricing:', error);
+    res.status(error.message === 'Category not found' ? 400 : 500).json({
+      success: false,
+      message: error.message === 'Category not found' ? error.message : 'Failed to preview bulk product pricing',
+    });
+  }
+};
+
 export const bulkUpdateProductPricing = async (req: Request, res: Response): Promise<void> => {
   try {
     const {
