@@ -303,6 +303,189 @@ export const getProductById = async (req: Request, res: Response): Promise<void>
  * Update product
  * PUT /api/v1/products/:id
  */
+/**
+ * Bulk update pricing for a product group/category.
+ * PATCH /api/v1/products/bulk-pricing
+ *
+ * Targeting is intentionally explicit:
+ * - skuPrefix can target groups such as 2627EAGLE
+ * - categoryId can target an entire Mongo category
+ * Both may be supplied together to narrow the update.
+ *
+ * Only the base product price and shared user/retailer slabs are changed.
+ * Per-retailer special pricing is never overwritten by this endpoint.
+ */
+export const previewBulkProductPricing = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { categoryId, skuPrefix, limit } = req.body;
+
+    if (!categoryId && !skuPrefix) {
+      res.status(400).json({ success: false, message: 'At least one target is required: categoryId or skuPrefix' });
+      return;
+    }
+
+    if (skuPrefix !== undefined && (typeof skuPrefix !== 'string' || !skuPrefix.trim())) {
+      res.status(400).json({ success: false, message: 'skuPrefix must be a non-empty string' });
+      return;
+    }
+
+    if (!hasAdminPermission(req.user, 'OWNER')) {
+      res.status(403).json({ success: false, message: 'Bulk pricing preview requires OWNER permission' });
+      return;
+    }
+
+    const result = await ProductService.previewBulkPricing({
+      categoryId,
+      skuPrefix: typeof skuPrefix === 'string' ? skuPrefix.trim() : undefined,
+      limit: typeof limit === 'number' ? limit : undefined,
+    });
+
+    res.status(200).json({ success: true, data: result });
+  } catch (error: any) {
+    console.error('Error previewing bulk product pricing:', error);
+    res.status(error.message === 'Category not found' ? 400 : 500).json({
+      success: false,
+      message: error.message === 'Category not found' ? error.message : 'Failed to preview bulk product pricing',
+    });
+  }
+};
+
+export const bulkUpdateProductPricing = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const {
+      categoryId,
+      skuPrefix,
+      price,
+      normalUserPricing,
+      retailerPricing,
+    } = req.body;
+
+    if (!categoryId && !skuPrefix) {
+      res.status(400).json({
+        success: false,
+        message: 'At least one target is required: categoryId or skuPrefix',
+      });
+      return;
+    }
+
+    if (price === undefined && normalUserPricing === undefined && retailerPricing === undefined) {
+      res.status(400).json({
+        success: false,
+        message: 'Provide at least one pricing field: price, normalUserPricing, or retailerPricing',
+      });
+      return;
+    }
+
+    if (price !== undefined && (typeof price !== 'number' || !Number.isFinite(price) || price < 0)) {
+      res.status(400).json({ success: false, message: 'price must be a non-negative number' });
+      return;
+    }
+
+    if (skuPrefix !== undefined && (typeof skuPrefix !== 'string' || !skuPrefix.trim())) {
+      res.status(400).json({ success: false, message: 'skuPrefix must be a non-empty string' });
+      return;
+    }
+
+    if (normalUserPricing !== undefined && !Array.isArray(normalUserPricing)) {
+      res.status(400).json({ success: false, message: 'normalUserPricing must be an array of pricing slabs' });
+      return;
+    }
+
+    if (retailerPricing !== undefined && (
+      typeof retailerPricing !== 'object' ||
+      retailerPricing === null ||
+      !Array.isArray(retailerPricing.slabs)
+    )) {
+      res.status(400).json({ success: false, message: 'retailerPricing must contain a slabs array' });
+      return;
+    }
+
+    if (normalUserPricing !== undefined) {
+      for (const slab of normalUserPricing) {
+        if (
+          !slab ||
+          typeof slab.minQuantity !== 'number' ||
+          !Number.isFinite(slab.minQuantity) ||
+          slab.minQuantity < 1 ||
+          typeof slab.price !== 'number' ||
+          !Number.isFinite(slab.price) ||
+          slab.price < 0
+        ) {
+          res.status(400).json({
+            success: false,
+            message: 'Each normalUserPricing slab requires minQuantity >= 1 and price >= 0',
+          });
+          return;
+        }
+      }
+    }
+
+    if (retailerPricing !== undefined) {
+      if (
+        retailerPricing.minimumOrderQuantity !== undefined &&
+        (
+          typeof retailerPricing.minimumOrderQuantity !== 'number' ||
+          !Number.isFinite(retailerPricing.minimumOrderQuantity) ||
+          retailerPricing.minimumOrderQuantity < 1
+        )
+      ) {
+        res.status(400).json({
+          success: false,
+          message: 'retailerPricing.minimumOrderQuantity must be >= 1',
+        });
+        return;
+      }
+
+      for (const slab of retailerPricing.slabs) {
+        if (
+          !slab ||
+          typeof slab.minQuantity !== 'number' ||
+          !Number.isFinite(slab.minQuantity) ||
+          slab.minQuantity < 1 ||
+          typeof slab.price !== 'number' ||
+          !Number.isFinite(slab.price) ||
+          slab.price < 0
+        ) {
+          res.status(400).json({
+            success: false,
+            message: 'Each retailerPricing slab requires minQuantity >= 1 and price >= 0',
+          });
+          return;
+        }
+      }
+    }
+
+    if (!hasAdminPermission(req.user, 'OWNER')) {
+      res.status(403).json({
+        success: false,
+        message: 'Bulk pricing changes require OWNER permission',
+      });
+      return;
+    }
+
+    const result = await ProductService.bulkUpdatePricing({
+      categoryId,
+      skuPrefix: typeof skuPrefix === 'string' ? skuPrefix.trim() : undefined,
+      price,
+      normalUserPricing,
+      retailerPricing,
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Bulk product pricing updated successfully',
+      data: result,
+    });
+  } catch (error: any) {
+    console.error('Error bulk updating product pricing:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to bulk update product pricing',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+    });
+  }
+};
+
 export const updateProduct = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
