@@ -2,6 +2,7 @@ import { Router } from 'express';
 import {
   createProduct,
   bulkUpdateProductPricing,
+  previewBulkProductPricing,
   getAllProducts,
   getProductById,
   updateProduct,
@@ -39,6 +40,7 @@ router.post('/', authenticateUser, requireAnyAdminPermission(['PRODUCT_EDITOR', 
  * Update a product
  * Requires admin authentication
  */
+router.post('/bulk-pricing/preview', authenticateUser, requireAnyAdminPermission(['OWNER']), previewBulkProductPricing);
 router.patch('/bulk-pricing', authenticateUser, requireAnyAdminPermission(['OWNER']), bulkUpdateProductPricing);
 
 router.put('/:id', authenticateUser, requireAnyAdminPermission(['PRODUCT_EDITOR', 'OWNER']), validateObjectId, validateProductData(true), updateProduct);
