@@ -136,6 +136,56 @@ export class ProductService {
   }
 
   /**
+   * Preview the products that a bulk pricing filter would affect.
+   * This is read-only and is used by the admin UI before applying changes.
+   */
+  static async previewBulkPricing(data: {
+    categoryId?: string;
+    skuPrefix?: string;
+    limit?: number;
+  }): Promise<{
+    matchedCount: number;
+    sample: { id: string; name: string; sku: string; price: number }[];
+    filter: Record<string, unknown>;
+  }> {
+    const filter: Record<string, unknown> = {};
+
+    if (data.categoryId) {
+      const categoryExists = await this.checkCategoryExists(data.categoryId);
+      if (!categoryExists) {
+        throw new Error('Category not found');
+      }
+      filter.category = data.categoryId;
+    }
+
+    if (data.skuPrefix) {
+      const safePrefix = escapeRegex(data.skuPrefix);
+      filter.sku = { $regex: `^${safePrefix}`, $options: 'i' };
+    }
+
+    const limit = Math.min(Math.max(data.limit || 20, 1), 50);
+    const [matchedCount, products] = await Promise.all([
+      Product.countDocuments(filter),
+      Product.find(filter)
+        .select({ name: 1, sku: 1, price: 1 })
+        .sort({ sku: 1 })
+        .limit(limit)
+        .lean(),
+    ]);
+
+    return {
+      matchedCount,
+      sample: products.map((p: any) => ({
+        id: String(p._id),
+        name: p.name,
+        sku: p.sku,
+        price: p.price,
+      })),
+      filter,
+    };
+  }
+
+  /**
    * Bulk update pricing for an explicitly targeted product group.
    * Supports categoryId and/or SKU prefix. Both are combined with AND
    * when supplied, so callers can safely narrow the scope.
