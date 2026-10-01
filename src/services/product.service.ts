@@ -163,7 +163,7 @@ export class ProductService {
       filter.sku = { $regex: safePrefix, $options: 'i' };
     }
 
-    const limit = Math.min(Math.max(data.limit || 20, 1), 50);
+    const limit = Math.min(Math.max(data.limit || 10000, 1), 10000);
     const [matchedCount, products] = await Promise.all([
       Product.countDocuments(filter),
       Product.find(filter)
