@@ -145,7 +145,7 @@ export class ProductService {
     limit?: number;
   }): Promise<{
     matchedCount: number;
-    sample: { id: string; name: string; sku: string; price: number }[];
+    sample: { id: string; name: string; sku: string; price: number; image?: string }[];
     filter: Record<string, unknown>;
   }> {
     const filter: Record<string, unknown> = {};
@@ -171,7 +171,7 @@ export class ProductService {
     const [matchedCount, products] = await Promise.all([
       Product.countDocuments(filter),
       Product.find(filter)
-        .select({ name: 1, sku: 1, price: 1 })
+        .select({ name: 1, sku: 1, price: 1, images: 1, designImage: 1 })
         .sort({ sku: 1 })
         .limit(limit)
         .lean(),
@@ -184,6 +184,7 @@ export class ProductService {
         name: p.name,
         sku: p.sku,
         price: p.price,
+        image: p.designImage || p.images?.[0],
       })),
       filter,
     };
