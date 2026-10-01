@@ -160,7 +160,11 @@ export class ProductService {
 
     if (data.skuPrefix) {
       const safePrefix = escapeRegex(data.skuPrefix);
-      filter.sku = { $regex: safePrefix, $options: 'i' };
+      filter.$or = [
+        { name: { $regex: safePrefix, $options: 'i' } },
+        { description: { $regex: safePrefix, $options: 'i' } },
+        { sku: { $regex: safePrefix, $options: 'i' } },
+      ];
     }
 
     const limit = Math.min(Math.max(data.limit || 10000, 1), 10000);
@@ -216,7 +220,11 @@ export class ProductService {
 
     if (data.skuPrefix) {
       const safePrefix = escapeRegex(data.skuPrefix);
-      filter.sku = { $regex: `^${safePrefix}`, $options: 'i' };
+      filter.$or = [
+        { name: { $regex: safePrefix, $options: 'i' } },
+        { description: { $regex: safePrefix, $options: 'i' } },
+        { sku: { $regex: safePrefix, $options: 'i' } },
+      ];
     }
 
     const update: Record<string, unknown> = {};
