@@ -42,6 +42,8 @@ export interface IProduct extends Document {
   stock: number;
   isActive: boolean;
   isFeatured: boolean;
+  isPopular: boolean;
+  isNew: boolean;
   customFields?: any;
   normalUserPricing: IPricingSlab[];
   retailerPricing: IRetailerPricing;
@@ -135,6 +137,16 @@ const productSchema = new Schema<IProduct>(
     isFeatured: {
       type: Boolean,
       default: false,
+    },
+    isPopular: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    isNew: {
+      type: Boolean,
+      default: false,
+      index: true,
     },
     customFields: {
       type: Schema.Types.Mixed,
