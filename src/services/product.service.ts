@@ -248,6 +248,83 @@ export class ProductService {
   }
 
   /**
+   * Preview products that will be assigned to a subcategory using an optional SKU prefix.
+   */
+  static async previewBulkSubcategoryAssignment(data: {
+    categoryId: string;
+    subCategoryId: string;
+    skuPrefix?: string;
+    limit?: number;
+  }): Promise<{
+    matchedCount: number;
+    alreadyAssignedCount: number;
+    sample: { id: string; name: string; sku: string; image?: string; alreadyAssigned: boolean }[];
+  }> {
+    await this.checkCategoryExistsOrThrow(data.categoryId);
+    const subCategory = await SubCategory.findOne({ _id: data.subCategoryId, category: data.categoryId });
+    if (!subCategory) throw new Error('Subcategory not found or does not belong to the selected category');
+
+    const filter: Record<string, unknown> = { category: data.categoryId };
+    if (data.skuPrefix?.trim()) {
+      filter.sku = { $regex: '^' + escapeRegex(data.skuPrefix.trim()), $options: 'i' };
+    }
+
+    const limit = Math.min(Math.max(data.limit || 10000, 1), 10000);
+    const [matchedCount, products] = await Promise.all([
+      Product.countDocuments(filter),
+      Product.find(filter)
+        .select({ name: 1, sku: 1, images: 1, designImage: 1, subCategories: 1 })
+        .sort({ sku: 1 })
+        .limit(limit)
+        .lean(),
+    ]);
+
+    const subId = String(data.subCategoryId);
+    const alreadyAssignedCount = products.filter((p: any) => (p.subCategories || []).some((id: any) => String(id) === subId)).length;
+    return {
+      matchedCount,
+      alreadyAssignedCount,
+      sample: products.map((p: any) => ({
+        id: String(p._id),
+        name: p.name,
+        sku: p.sku,
+        image: p.designImage || p.images?.[0],
+        alreadyAssigned: (p.subCategories || []).some((id: any) => String(id) === subId),
+      })),
+    };
+  }
+
+  /**
+   * Assign all products matching category + optional SKU prefix to a subcategory.
+   * Existing subcategory assignments are preserved.
+   */
+  static async bulkAssignSubcategory(data: {
+    categoryId: string;
+    subCategoryId: string;
+    skuPrefix?: string;
+  }): Promise<{ matchedCount: number; modifiedCount: number; filter: Record<string, unknown> }> {
+    await this.checkCategoryExistsOrThrow(data.categoryId);
+    const subCategory = await SubCategory.findOne({ _id: data.subCategoryId, category: data.categoryId });
+    if (!subCategory) throw new Error('Subcategory not found or does not belong to the selected category');
+
+    const filter: Record<string, unknown> = { category: data.categoryId };
+    if (data.skuPrefix?.trim()) {
+      filter.sku = { $regex: '^' + escapeRegex(data.skuPrefix.trim()), $options: 'i' };
+    }
+
+    const result = await Product.updateMany(
+      filter,
+      { $addToSet: { subCategories: data.subCategoryId } },
+      { runValidators: true }
+    );
+
+    return { matchedCount: result.matchedCount, modifiedCount: result.modifiedCount, filter };
+  }
+
+  private static async checkCategoryExistsOrThrow(categoryId: string): Promise<void> {
+    if (!(await this.checkCategoryExists(categoryId))) throw new Error('Category not found');
+  }
+  /**
    * Update product
    */
   static async updateProduct(id: string, data: Partial<IProduct>): Promise<IProduct | null> {
