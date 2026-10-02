@@ -8,6 +8,8 @@ interface ProductQuery {
   tags?: { $in: string[] };
   isActive?: boolean;
   isFeatured?: boolean;
+  isPopular?: boolean;
+  isNew?: boolean;
   $or?: any[];
 }
 
@@ -69,7 +71,9 @@ export class ProductService {
     subCategoryId?: string,
     tagIds?: string[],
     featured?: boolean,
-    isActive?: boolean
+    isActive?: boolean,
+    isPopular?: boolean,
+    isNew?: boolean
   ): Promise<{ products: IProduct[]; total: number; page: number; totalPages: number }> {
     const skip = (page - 1) * limit;
 
@@ -94,6 +98,12 @@ export class ProductService {
 
     if (typeof isActive === 'boolean') {
       query.isActive = isActive;
+    }
+    if (typeof isPopular === 'boolean') {
+      query.isPopular = isPopular;
+    }
+    if (typeof isNew === 'boolean') {
+      query.isNew = isNew;
     }
 
     const searchTerm = search?.trim();
