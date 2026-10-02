@@ -139,6 +139,8 @@ export const createProduct = async (req: Request, res: Response): Promise<void> 
       stock,
       isActive,
       isFeatured,
+      isPopular,
+      isNew,
       customFields,
       normalUserPricing,
       retailerPricing,
@@ -163,6 +165,8 @@ export const createProduct = async (req: Request, res: Response): Promise<void> 
       stock: stock !== undefined ? stock : 0,
       isActive: isActive !== undefined ? isActive : true,
       isFeatured: isFeatured !== undefined ? isFeatured : false,
+      isPopular: isPopular !== undefined ? isPopular : false,
+      isNew: isNew !== undefined ? isNew : false,
       customFields: customFields || null,
       normalUserPricing: normalUserPricing || [],
       retailerPricing: retailerPricing || { minimumOrderQuantity: 1, slabs: [] },
@@ -211,8 +215,10 @@ export const getAllProducts = async (req: Request, res: Response): Promise<void>
     const tags = req.query.tags ? (req.query.tags as string).split(',') : undefined;
     const featured = parseBooleanQuery(req.query.featured);
     const active = parseBooleanQuery(req.query.active);
+    const popular = parseBooleanQuery(req.query.popular);
+    const isNew = parseBooleanQuery(req.query.new);
 
-    const result = await ProductService.getAllProducts(page, limit, search, category, subCategory, tags, featured, active);
+    const result = await ProductService.getAllProducts(page, limit, search, category, subCategory, tags, featured, active, popular, isNew);
 
     const isAdmin = req.user?.role === ADMIN_ROLE_CLAIM;
     let products;
@@ -557,6 +563,8 @@ export const updateProduct = async (req: Request, res: Response): Promise<void> 
       stock,
       isActive,
       isFeatured,
+      isPopular,
+      isNew,
       customFields,
       normalUserPricing,
       retailerPricing,
@@ -581,6 +589,8 @@ export const updateProduct = async (req: Request, res: Response): Promise<void> 
     if (stock !== undefined) updateData.stock = stock;
     if (isActive !== undefined) updateData.isActive = isActive;
     if (isFeatured !== undefined) updateData.isFeatured = isFeatured;
+    if (isPopular !== undefined) updateData.isPopular = isPopular;
+    if (isNew !== undefined) updateData.isNew = isNew;
     if (customFields !== undefined) updateData.customFields = customFields;
     if (normalUserPricing !== undefined) updateData.normalUserPricing = normalUserPricing;
     if (retailerPricing !== undefined) updateData.retailerPricing = retailerPricing;
