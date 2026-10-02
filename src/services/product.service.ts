@@ -266,7 +266,9 @@ export class ProductService {
 
     const filter: Record<string, unknown> = { category: data.categoryId };
     if (data.skuPrefix?.trim()) {
-      filter.sku = { $regex: '^' + escapeRegex(data.skuPrefix.trim()), $options: 'i' };
+      // Match the entered text anywhere in the SKU so an admin can enter
+      // "BULLET" and match SKUs such as "2627BULLET0001".
+      filter.sku = { $regex: escapeRegex(data.skuPrefix.trim()), $options: 'i' };
     }
 
     const limit = Math.min(Math.max(data.limit || 10000, 1), 10000);
@@ -309,7 +311,9 @@ export class ProductService {
 
     const filter: Record<string, unknown> = { category: data.categoryId };
     if (data.skuPrefix?.trim()) {
-      filter.sku = { $regex: '^' + escapeRegex(data.skuPrefix.trim()), $options: 'i' };
+      // Match the entered text anywhere in the SKU so an admin can enter
+      // "BULLET" and match SKUs such as "2627BULLET0001".
+      filter.sku = { $regex: escapeRegex(data.skuPrefix.trim()), $options: 'i' };
     }
 
     const result = await Product.updateMany(
