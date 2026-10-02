@@ -315,6 +315,60 @@ export const getProductById = async (req: Request, res: Response): Promise<void>
  * Only the base product price and shared user/retailer slabs are changed.
  * Per-retailer special pricing is never overwritten by this endpoint.
  */
+export const previewBulkSubcategoryAssignment = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { categoryId, subCategoryId, skuPrefix, limit } = req.body;
+    if (!categoryId || !subCategoryId) {
+      res.status(400).json({ success: false, message: 'categoryId and subCategoryId are required' });
+      return;
+    }
+    if (skuPrefix !== undefined && (typeof skuPrefix !== 'string' || !skuPrefix.trim())) {
+      res.status(400).json({ success: false, message: 'skuPrefix must be a non-empty string when provided' });
+      return;
+    }
+    if (!hasAdminPermission(req.user, 'OWNER')) {
+      res.status(403).json({ success: false, message: 'Subcategory assignment requires OWNER permission' });
+      return;
+    }
+    const result = await ProductService.previewBulkSubcategoryAssignment({
+      categoryId,
+      subCategoryId,
+      skuPrefix: typeof skuPrefix === 'string' ? skuPrefix.trim() : undefined,
+      limit: typeof limit === 'number' ? limit : undefined,
+    });
+    res.status(200).json({ success: true, data: result });
+  } catch (error: any) {
+    console.error('Error previewing bulk subcategory assignment:', error);
+    res.status(400).json({ success: false, message: error.message || 'Failed to preview subcategory assignment' });
+  }
+};
+
+export const bulkAssignSubcategory = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { categoryId, subCategoryId, skuPrefix } = req.body;
+    if (!categoryId || !subCategoryId) {
+      res.status(400).json({ success: false, message: 'categoryId and subCategoryId are required' });
+      return;
+    }
+    if (skuPrefix !== undefined && (typeof skuPrefix !== 'string' || !skuPrefix.trim())) {
+      res.status(400).json({ success: false, message: 'skuPrefix must be a non-empty string when provided' });
+      return;
+    }
+    if (!hasAdminPermission(req.user, 'OWNER')) {
+      res.status(403).json({ success: false, message: 'Subcategory assignment requires OWNER permission' });
+      return;
+    }
+    const result = await ProductService.bulkAssignSubcategory({
+      categoryId,
+      subCategoryId,
+      skuPrefix: typeof skuPrefix === 'string' ? skuPrefix.trim() : undefined,
+    });
+    res.status(200).json({ success: true, message: 'Products assigned to subcategory successfully', data: result });
+  } catch (error: any) {
+    console.error('Error bulk assigning subcategory:', error);
+    res.status(400).json({ success: false, message: error.message || 'Failed to assign products to subcategory' });
+  }
+};
 export const previewBulkProductPricing = async (req: Request, res: Response): Promise<void> => {
   try {
     const { categoryId, skuPrefix, limit } = req.body;
