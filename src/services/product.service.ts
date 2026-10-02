@@ -316,9 +316,12 @@ export class ProductService {
       filter.sku = { $regex: escapeRegex(data.skuPrefix.trim()), $options: 'i' };
     }
 
+    // SKU assignment is exclusive: a matched SKU group belongs only
+    // to the selected frontend subcategory. This prevents products from
+    // appearing under unrelated subcategory pages because of old assignments.
     const result = await Product.updateMany(
       filter,
-      { $addToSet: { subCategories: data.subCategoryId } },
+      { $set: { subCategories: [data.subCategoryId] } },
       { runValidators: true }
     );
 
