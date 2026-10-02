@@ -24,7 +24,8 @@ app.use(
 // CORS configuration
 const corsOptions = {
   origin: process.env.CORS_ORIGIN || '*',
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  // PATCH is required by the admin bulk-pricing update endpoint.
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
   optionsSuccessStatus: 200
@@ -73,4 +74,3 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
 });
 
 export default app;
-
