@@ -8,6 +8,7 @@ interface ProductQuery {
   tags?: { $in: string[] };
   isActive?: boolean;
   isFeatured?: boolean;
+  isHomepageSticker?: boolean;
   $or?: any[];
 }
 
@@ -69,7 +70,8 @@ export class ProductService {
     subCategoryId?: string,
     tagIds?: string[],
     featured?: boolean,
-    isActive?: boolean
+    isActive?: boolean,
+    homepageSticker?: boolean
   ): Promise<{ products: IProduct[]; total: number; page: number; totalPages: number }> {
     const skip = (page - 1) * limit;
 
@@ -96,6 +98,10 @@ export class ProductService {
       query.isActive = isActive;
     }
 
+    if (typeof homepageSticker === 'boolean') {
+      query.isHomepageSticker = homepageSticker;
+    }
+
     const searchTerm = search?.trim();
     if (searchTerm) {
       const safeSearch = escapeRegex(searchTerm);
@@ -111,7 +117,7 @@ export class ProductService {
         .populate('category')
         .populate('subCategories')
         .populate('tags')
-        .sort({ createdAt: -1 })
+        .sort(typeof homepageSticker === 'boolean' ? { homepageStickerOrder: 1, createdAt: -1 } : { createdAt: -1 })
         .skip(skip)
         .limit(limit),
       Product.countDocuments(query)

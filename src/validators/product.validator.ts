@@ -5,7 +5,7 @@ import { Request, Response, NextFunction } from 'express';
  */
 export const validateProductData = (isUpdate: boolean = false) => {
   return (req: Request, res: Response, next: NextFunction): void => {
-    const { name, description, price, sku, category, subCategories, tags, stock, images, isActive, isFeatured, normalUserPricing, retailerPricing } = req.body;
+    const { name, description, price, sku, category, subCategories, tags, stock, images, isActive, isFeatured, isHomepageSticker, homepageStickerOrder, normalUserPricing, retailerPricing } = req.body;
     const errors: string[] = [];
 
     // Validate name
@@ -95,6 +95,14 @@ export const validateProductData = (isUpdate: boolean = false) => {
 
     if (isFeatured !== undefined && typeof isFeatured !== 'boolean') {
       errors.push('isFeatured must be a boolean');
+    }
+
+    if (isHomepageSticker !== undefined && typeof isHomepageSticker !== 'boolean') {
+      errors.push('isHomepageSticker must be a boolean');
+    }
+
+    if (homepageStickerOrder !== undefined && (typeof homepageStickerOrder !== 'number' || !Number.isInteger(homepageStickerOrder) || homepageStickerOrder < 0)) {
+      errors.push('homepageStickerOrder must be a non-negative integer');
     }
 
     // Validate normalUserPricing (optional array of slabs)
