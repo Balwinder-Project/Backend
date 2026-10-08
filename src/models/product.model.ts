@@ -42,6 +42,8 @@ export interface IProduct extends Document {
   stock: number;
   isActive: boolean;
   isFeatured: boolean;
+  isHomepageSticker: boolean;
+  homepageStickerOrder: number;
   customFields?: any;
   normalUserPricing: IPricingSlab[];
   retailerPricing: IRetailerPricing;
@@ -136,6 +138,16 @@ const productSchema = new Schema<IProduct>(
       type: Boolean,
       default: false,
     },
+    isHomepageSticker: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    homepageStickerOrder: {
+      type: Number,
+      default: 0,
+      min: [0, 'Homepage sticker order cannot be negative'],
+    },
     customFields: {
       type: Schema.Types.Mixed,
       default: null,
@@ -220,6 +232,7 @@ productSchema.index({ subCategories: 1 });
 productSchema.index({ tags: 1 });
 productSchema.index({ isActive: 1 });
 productSchema.index({ isFeatured: 1 });
+productSchema.index({ isHomepageSticker: 1, homepageStickerOrder: 1 });
 productSchema.index({ sku: 1 });
 
 const Product = mongoose.model<IProduct>('Product', productSchema);
