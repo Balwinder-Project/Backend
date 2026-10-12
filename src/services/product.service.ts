@@ -388,16 +388,38 @@ export class ProductService {
       filter.sku = { $regex: escapeRegex(data.skuPrefix.trim()), $options: 'i' };
     }
 
-    // SKU assignment is exclusive: a matched SKU group belongs only
-    // to the selected frontend subcategory. This prevents products from
-    // appearing under unrelated subcategory pages because of old assignments.
+    // If a SKU prefix is supplied, first remove this subcategory from products
+    // in the same parent category that do NOT match the selected SKU group.
+    // Otherwise stale assignments remain on unrelated products (for example,
+    // tank stickers continue appearing on a shocker category page).
+    let removedStaleAssignments = 0;
+    if (data.skuPrefix?.trim()) {
+      const safePrefix = escapeRegex(data.skuPrefix.trim());
+      const cleanupResult = await Product.updateMany(
+        {
+          category: data.categoryId,
+          subCategories: data.subCategoryId,
+          sku: { $not: { $regex: safePrefix, $options: 'i' } },
+        },
+        { $pull: { subCategories: data.subCategoryId } },
+        { runValidators: true }
+      );
+      removedStaleAssignments = cleanupResult.modifiedCount;
+    }
+
+    // The matched SKU group belongs only to the selected subcategory.
     const result = await Product.updateMany(
       filter,
       { $set: { subCategories: [data.subCategoryId] } },
       { runValidators: true }
     );
 
-    return { matchedCount: result.matchedCount, modifiedCount: result.modifiedCount, filter };
+    return {
+      matchedCount: result.matchedCount,
+      modifiedCount: result.modifiedCount,
+      removedStaleAssignments,
+      filter,
+    };
   }
 
   private static async checkCategoryExistsOrThrow(categoryId: string): Promise<void> {
