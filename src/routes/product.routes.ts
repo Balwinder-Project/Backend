@@ -3,6 +3,8 @@ import {
   createProduct,
   bulkUpdateProductPricing,
   previewBulkProductPricing,
+  bulkUpdateImageFit,
+  previewBulkImageFit,
   bulkAssignSubcategory,
   previewBulkSubcategoryAssignment,
   getAllProducts,
@@ -42,6 +44,8 @@ router.post('/', authenticateUser, requireAnyAdminPermission(['PRODUCT_EDITOR', 
  * Update a product
  * Requires admin authentication
  */
+router.post('/bulk-image-fit/preview', authenticateUser, requireAnyAdminPermission(['OWNER']), previewBulkImageFit);
+router.patch('/bulk-image-fit', authenticateUser, requireAnyAdminPermission(['OWNER']), bulkUpdateImageFit);
 router.post('/bulk-pricing/preview', authenticateUser, requireAnyAdminPermission(['OWNER']), previewBulkProductPricing);
 router.post('/bulk-subcategory/preview', authenticateUser, requireAnyAdminPermission(['OWNER']), previewBulkSubcategoryAssignment);
 router.patch('/bulk-subcategory', authenticateUser, requireAnyAdminPermission(['OWNER']), bulkAssignSubcategory);
