@@ -376,6 +376,62 @@ export const bulkAssignSubcategory = async (req: Request, res: Response): Promis
     res.status(400).json({ success: false, message: error.message || 'Failed to assign products to subcategory' });
   }
 };
+export const previewBulkImageFit = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { categoryId, skuPrefix, limit } = req.body;
+    if (!categoryId && !skuPrefix) {
+      res.status(400).json({ success: false, message: 'Select a category or enter an SKU group' });
+      return;
+    }
+    if (skuPrefix !== undefined && (typeof skuPrefix !== 'string' || !skuPrefix.trim())) {
+      res.status(400).json({ success: false, message: 'SKU group must be non-empty when provided' });
+      return;
+    }
+    if (!hasAdminPermission(req.user, 'OWNER')) {
+      res.status(403).json({ success: false, message: 'Bulk image display changes require OWNER permission' });
+      return;
+    }
+    const result = await ProductService.previewBulkImageFit({
+      categoryId,
+      skuPrefix: typeof skuPrefix === 'string' ? skuPrefix.trim() : undefined,
+      limit: typeof limit === 'number' ? limit : undefined,
+    });
+    res.status(200).json({ success: true, data: result });
+  } catch (error: any) {
+    res.status(error.message === 'Category not found' ? 400 : 500).json({ success: false, message: error.message || 'Failed to preview image display changes' });
+  }
+};
+
+export const bulkUpdateImageFit = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { categoryId, skuPrefix, imageFit } = req.body;
+    if (!categoryId && !skuPrefix) {
+      res.status(400).json({ success: false, message: 'Select a category or enter an SKU group' });
+      return;
+    }
+    if (skuPrefix !== undefined && (typeof skuPrefix !== 'string' || !skuPrefix.trim())) {
+      res.status(400).json({ success: false, message: 'SKU group must be non-empty when provided' });
+      return;
+    }
+    if (imageFit !== 'contain' && imageFit !== 'cover') {
+      res.status(400).json({ success: false, message: 'imageFit must be contain or cover' });
+      return;
+    }
+    if (!hasAdminPermission(req.user, 'OWNER')) {
+      res.status(403).json({ success: false, message: 'Bulk image display changes require OWNER permission' });
+      return;
+    }
+    const result = await ProductService.bulkUpdateImageFit({
+      categoryId,
+      skuPrefix: typeof skuPrefix === 'string' ? skuPrefix.trim() : undefined,
+      imageFit,
+    });
+    res.status(200).json({ success: true, message: 'Product image display settings updated', data: result });
+  } catch (error: any) {
+    res.status(error.message === 'Category not found' ? 400 : 500).json({ success: false, message: error.message || 'Failed to update image display settings' });
+  }
+};
+
 export const previewBulkProductPricing = async (req: Request, res: Response): Promise<void> => {
   try {
     const { categoryId, skuPrefix, limit } = req.body;
