@@ -613,6 +613,7 @@ export const updateProduct = async (req: Request, res: Response): Promise<void> 
       price,
       sku,
       images,
+      imageFit,
       holographicImages,
       category,
       subCategories,
