@@ -29,10 +29,12 @@ export const uploadImageToB2 = async (
       .webp({ quality: 80 })
       .toBuffer();
 
-    // Process thumbnail: 400x400 cover crop, lower quality
+    // Process thumbnail inside a 400x400 boundary without cropping.
+    // Cover-cropping removes the top/bottom or sides of sticker sheets,
+    // and CSS object-contain cannot recover pixels already removed here.
     const thumbBuffer = await sharp(fileBuffer)
-      .resize(400, 400, { fit: 'cover' })
-      .webp({ quality: 60 })
+      .resize(400, 400, { fit: 'inside', withoutEnlargement: true })
+      .webp({ quality: 70 })
       .toBuffer();
 
     const uploads = [
