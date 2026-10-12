@@ -89,6 +89,12 @@ export const validateProductData = (isUpdate: boolean = false) => {
       }
     }
 
+    if (req.body.imageFit !== undefined && !['contain', 'cover'].includes(req.body.imageFit)) errors.push('imageFit must be contain or cover');
+    if (req.body.imageBackground !== undefined && !['black', 'white', 'gray'].includes(req.body.imageBackground)) errors.push('imageBackground must be black, white, or gray');
+    if (req.body.imageAspectRatio !== undefined && !['portrait', 'square', 'landscape'].includes(req.body.imageAspectRatio)) errors.push('imageAspectRatio must be portrait, square, or landscape');
+    if (req.body.imagePosition !== undefined && !['left', 'center', 'right'].includes(req.body.imagePosition)) errors.push('imagePosition must be left, center, or right');
+    if (req.body.imageFrame !== undefined && typeof req.body.imageFrame !== 'boolean') errors.push('imageFrame must be a boolean');
+
     if (isActive !== undefined && typeof isActive !== 'boolean') {
       errors.push('isActive must be a boolean');
     }
