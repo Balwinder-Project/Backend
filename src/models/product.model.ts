@@ -33,6 +33,7 @@ export interface IProduct extends Document {
   price: number;
   sku: string;
   images: string[];
+  imageFit: 'contain' | 'cover';
   holographicImages: string[];
   designImage?: string;
   mockupImages: IMockupImage[];
@@ -89,6 +90,11 @@ const productSchema = new Schema<IProduct>(
     images: {
       type: [String],
       default: [],
+    },
+    imageFit: {
+      type: String,
+      enum: ['contain', 'cover'],
+      default: 'contain',
     },
     holographicImages: {
       type: [String],
