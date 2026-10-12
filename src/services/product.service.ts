@@ -253,6 +253,58 @@ export class ProductService {
     };
   }
 
+  static async previewBulkImageFit(data: { categoryId?: string; skuPrefix?: string; limit?: number }): Promise<{
+    matchedCount: number;
+    sample: { id: string; name: string; sku: string; image?: string; imageFit?: string }[];
+    filter: Record<string, unknown>;
+  }> {
+    const filter: Record<string, unknown> = {};
+    if (data.categoryId) {
+      const categoryExists = await this.checkCategoryExists(data.categoryId);
+      if (!categoryExists) throw new Error('Category not found');
+      filter.category = data.categoryId;
+    }
+    if (data.skuPrefix) {
+      const safePrefix = escapeRegex(data.skuPrefix);
+      filter.$or = [
+        { name: { $regex: safePrefix, $options: 'i' } },
+        { description: { $regex: safePrefix, $options: 'i' } },
+        { sku: { $regex: safePrefix, $options: 'i' } },
+      ];
+    }
+    const limit = Math.min(Math.max(data.limit || 10000, 1), 10000);
+    const [matchedCount, products] = await Promise.all([
+      Product.countDocuments(filter),
+      Product.find(filter).select({ name: 1, sku: 1, images: 1, designImage: 1, imageFit: 1 }).sort({ sku: 1 }).limit(limit).lean(),
+    ]);
+    return {
+      matchedCount,
+      sample: products.map((p: any) => ({ id: String(p._id), name: p.name, sku: p.sku, image: p.images?.[0] || p.designImage, imageFit: p.imageFit || 'contain' })),
+      filter,
+    };
+  }
+
+  static async bulkUpdateImageFit(data: { categoryId?: string; skuPrefix?: string; imageFit: 'contain' | 'cover' }): Promise<{
+    matchedCount: number; modifiedCount: number; filter: Record<string, unknown>;
+  }> {
+    const filter: Record<string, unknown> = {};
+    if (data.categoryId) {
+      const categoryExists = await this.checkCategoryExists(data.categoryId);
+      if (!categoryExists) throw new Error('Category not found');
+      filter.category = data.categoryId;
+    }
+    if (data.skuPrefix) {
+      const safePrefix = escapeRegex(data.skuPrefix);
+      filter.$or = [
+        { name: { $regex: safePrefix, $options: 'i' } },
+        { description: { $regex: safePrefix, $options: 'i' } },
+        { sku: { $regex: safePrefix, $options: 'i' } },
+      ];
+    }
+    const result = await Product.updateMany(filter, { $set: { imageFit: data.imageFit } }, { runValidators: true });
+    return { matchedCount: result.matchedCount, modifiedCount: result.modifiedCount, filter };
+  }
+
   /**
    * Preview products that will be assigned to a subcategory using an optional SKU prefix.
    */
