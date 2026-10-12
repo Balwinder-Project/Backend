@@ -307,7 +307,7 @@ export class ProductService {
         { sku: { $regex: safePrefix, $options: 'i' } },
       ];
     }
-    const update: Record<string, unknown> = {};
+    const update: Partial<Pick<IProduct, 'imageFit' | 'imageBackground' | 'imageAspectRatio' | 'imagePosition' | 'imageFrame'>> = {};
     if (data.imageFit !== undefined) update.imageFit = data.imageFit;
     if (data.imageBackground !== undefined) update.imageBackground = data.imageBackground;
     if (data.imageAspectRatio !== undefined) update.imageAspectRatio = data.imageAspectRatio;
