@@ -404,7 +404,7 @@ export const previewBulkImageFit = async (req: Request, res: Response): Promise<
 
 export const bulkUpdateImageFit = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { categoryId, skuPrefix, imageFit, imageBackground, imageAspectRatio, imagePosition, imageFrame } = req.body;
+    const { categoryId, skuPrefix, imageFit, imageBackground, imageAspectRatio, imageAspectRatioValue, imagePosition, imageFrame } = req.body;
     if (!categoryId && !skuPrefix) {
       res.status(400).json({ success: false, message: 'Select a category or enter an SKU group' });
       return;
@@ -421,8 +421,16 @@ export const bulkUpdateImageFit = async (req: Request, res: Response): Promise<v
       res.status(400).json({ success: false, message: 'imageBackground must be black, white, or gray' });
       return;
     }
-    if (imageAspectRatio !== undefined && !['portrait', 'square', 'landscape'].includes(imageAspectRatio)) {
+    if (imageAspectRatio !== undefined && !['portrait', 'square', 'landscape', 'custom'].includes(imageAspectRatio)) {
       res.status(400).json({ success: false, message: 'imageAspectRatio must be portrait, square, or landscape' });
+      return;
+    }
+    if (imageAspectRatioValue !== undefined && (typeof imageAspectRatioValue !== 'number' || !Number.isFinite(imageAspectRatioValue) || imageAspectRatioValue < 0.2 || imageAspectRatioValue > 5 || Math.abs(imageAspectRatioValue * 100 - Math.round(imageAspectRatioValue * 100)) > 1e-7)) {
+      res.status(400).json({ success: false, message: 'imageAspectRatioValue must be between 0.20 and 5.00 with at most 2 decimal places' });
+      return;
+    }
+    if (imageAspectRatio === 'custom' && imageAspectRatioValue === undefined) {
+      res.status(400).json({ success: false, message: 'Provide imageAspectRatioValue for a custom ratio' });
       return;
     }
     if (imagePosition !== undefined && !['left', 'center', 'right'].includes(imagePosition)) {
@@ -433,7 +441,7 @@ export const bulkUpdateImageFit = async (req: Request, res: Response): Promise<v
       res.status(400).json({ success: false, message: 'imageFrame must be a boolean' });
       return;
     }
-    if ([imageFit, imageBackground, imageAspectRatio, imagePosition, imageFrame].every(value => value === undefined)) {
+    if ([imageFit, imageBackground, imageAspectRatio, imageAspectRatioValue, imagePosition, imageFrame].every(value => value === undefined)) {
       res.status(400).json({ success: false, message: 'Provide at least one image display setting to update' });
       return;
     }
@@ -444,7 +452,7 @@ export const bulkUpdateImageFit = async (req: Request, res: Response): Promise<v
     const result = await ProductService.bulkUpdateImageFit({
       categoryId,
       skuPrefix: typeof skuPrefix === 'string' ? skuPrefix.trim() : undefined,
-      imageFit, imageBackground, imageAspectRatio, imagePosition, imageFrame,
+      imageFit, imageBackground, imageAspectRatio, imageAspectRatioValue, imagePosition, imageFrame,
     });
     res.status(200).json({ success: true, message: 'Product image display settings updated', data: result });
   } catch (error: any) {
