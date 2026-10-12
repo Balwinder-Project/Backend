@@ -132,6 +132,7 @@ export const createProduct = async (req: Request, res: Response): Promise<void> 
       price,
       sku,
       images,
+      imageFit,
       holographicImages,
       category,
       subCategories,
@@ -158,6 +159,7 @@ export const createProduct = async (req: Request, res: Response): Promise<void> 
       price,
       sku,
       images: images || [],
+      imageFit: imageFit === 'cover' ? 'cover' : 'contain',
       holographicImages: holographicImages || [],
       category,
       subCategories: subCategories || [],
@@ -582,6 +584,7 @@ export const updateProduct = async (req: Request, res: Response): Promise<void> 
     if (price !== undefined) updateData.price = price;
     if (sku) updateData.sku = sku;
     if (images !== undefined) updateData.images = images;
+    if (imageFit !== undefined) updateData.imageFit = imageFit === 'cover' ? 'cover' : 'contain';
     if (category) updateData.category = category;
     if (subCategories !== undefined) updateData.subCategories = subCategories || [];
     if (tags !== undefined) updateData.tags = tags;
