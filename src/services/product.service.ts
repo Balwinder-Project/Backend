@@ -275,11 +275,11 @@ export class ProductService {
     const limit = Math.min(Math.max(data.limit || 10000, 1), 10000);
     const [matchedCount, products] = await Promise.all([
       Product.countDocuments(filter),
-      Product.find(filter).select({ name: 1, sku: 1, images: 1, designImage: 1, imageFit: 1, imageBackground: 1, imageAspectRatio: 1, imagePosition: 1, imageFrame: 1 }).sort({ sku: 1 }).limit(limit).lean(),
+      Product.find(filter).select({ name: 1, sku: 1, images: 1, designImage: 1, imageFit: 1, imageBackground: 1, imageAspectRatio: 1, imageAspectRatioValue: 1, imagePosition: 1, imageFrame: 1 }).sort({ sku: 1 }).limit(limit).lean(),
     ]);
     return {
       matchedCount,
-      sample: products.map((p: any) => ({ id: String(p._id), name: p.name, sku: p.sku, image: p.images?.[0] || p.designImage, imageFit: p.imageFit || 'contain', imageBackground: p.imageBackground || 'black', imageAspectRatio: p.imageAspectRatio || 'portrait', imagePosition: p.imagePosition || 'center', imageFrame: p.imageFrame === true })),
+      sample: products.map((p: any) => ({ id: String(p._id), name: p.name, sku: p.sku, image: p.images?.[0] || p.designImage, imageFit: p.imageFit || 'contain', imageBackground: p.imageBackground || 'black', imageAspectRatio: p.imageAspectRatio || 'portrait', imageAspectRatioValue: p.imageAspectRatioValue, imagePosition: p.imagePosition || 'center', imageFrame: p.imageFrame === true })),
       filter,
     };
   }
@@ -289,7 +289,8 @@ export class ProductService {
     skuPrefix?: string;
     imageFit?: 'contain' | 'cover';
     imageBackground?: 'black' | 'white' | 'gray';
-    imageAspectRatio?: 'portrait' | 'square' | 'landscape';
+    imageAspectRatio?: 'portrait' | 'square' | 'landscape' | 'custom';
+    imageAspectRatioValue?: number;
     imagePosition?: 'left' | 'center' | 'right';
     imageFrame?: boolean;
   }): Promise<{ matchedCount: number; modifiedCount: number; filter: Record<string, unknown> }> {
@@ -307,10 +308,11 @@ export class ProductService {
         { sku: { $regex: safePrefix, $options: 'i' } },
       ];
     }
-    const update: Partial<Pick<IProduct, 'imageFit' | 'imageBackground' | 'imageAspectRatio' | 'imagePosition' | 'imageFrame'>> = {};
+    const update: Partial<Pick<IProduct, 'imageFit' | 'imageBackground' | 'imageAspectRatio' | 'imageAspectRatioValue' | 'imagePosition' | 'imageFrame'>> = {};
     if (data.imageFit !== undefined) update.imageFit = data.imageFit;
     if (data.imageBackground !== undefined) update.imageBackground = data.imageBackground;
     if (data.imageAspectRatio !== undefined) update.imageAspectRatio = data.imageAspectRatio;
+    if (data.imageAspectRatioValue !== undefined) update.imageAspectRatioValue = data.imageAspectRatioValue;
     if (data.imagePosition !== undefined) update.imagePosition = data.imagePosition;
     if (data.imageFrame !== undefined) update.imageFrame = data.imageFrame;
     const result = await Product.updateMany(filter, { $set: update }, { runValidators: true });
