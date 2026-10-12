@@ -34,6 +34,10 @@ export interface IProduct extends Document {
   sku: string;
   images: string[];
   imageFit: 'contain' | 'cover';
+  imageBackground: 'black' | 'white' | 'gray';
+  imageAspectRatio: 'portrait' | 'square' | 'landscape';
+  imagePosition: 'left' | 'center' | 'right';
+  imageFrame: boolean;
   holographicImages: string[];
   designImage?: string;
   mockupImages: IMockupImage[];
@@ -96,6 +100,10 @@ const productSchema = new Schema<IProduct>(
       enum: ['contain', 'cover'],
       default: 'contain',
     },
+    imageBackground: { type: String, enum: ['black', 'white', 'gray'], default: 'black' },
+    imageAspectRatio: { type: String, enum: ['portrait', 'square', 'landscape'], default: 'portrait' },
+    imagePosition: { type: String, enum: ['left', 'center', 'right'], default: 'center' },
+    imageFrame: { type: Boolean, default: false },
     holographicImages: {
       type: [String],
       default: [],
