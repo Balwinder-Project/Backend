@@ -325,7 +325,7 @@ export class ProductService {
   static async previewBulkSubcategoryAssignment(data: {
     categoryId: string;
     subCategoryId: string;
-    skuPrefix?: string;
+    skuPrefix: string;
     limit?: number;
   }): Promise<{
     matchedCount: number;
@@ -375,8 +375,8 @@ export class ProductService {
   }
 
   /**
-   * Assign all products matching category + optional SKU prefix to a subcategory.
-   * Existing subcategory assignments are preserved.
+   * Assign products in a specific SKU group to exactly one subcategory.
+   * Other subcategory assignments on matched products are replaced.
    */
   static async bulkAssignSubcategory(data: {
     categoryId: string;
@@ -398,9 +398,8 @@ export class ProductService {
     // Otherwise stale assignments remain on unrelated products (for example,
     // tank stickers continue appearing on a shocker category page).
     let removedStaleAssignments = 0;
-    {
-      const safePrefix = escapeRegex(data.skuPrefix.trim());
-      const cleanupResult = await Product.updateMany(
+    const safePrefix = escapeRegex(data.skuPrefix.trim());
+    const cleanupResult = await Product.updateMany(
         {
           category: data.categoryId,
           subCategories: data.subCategoryId,
@@ -409,8 +408,7 @@ export class ProductService {
         { $pull: { subCategories: data.subCategoryId } },
         { runValidators: true }
       );
-      removedStaleAssignments = cleanupResult.modifiedCount;
-    }
+    removedStaleAssignments = cleanupResult.modifiedCount;
 
     // The matched SKU group belongs only to the selected subcategory.
     const result = await Product.updateMany(
