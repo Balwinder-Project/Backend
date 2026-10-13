@@ -212,6 +212,7 @@ export const getAllProducts = async (req: Request, res: Response): Promise<void>
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 10;
     const search = req.query.search as string;
+    const exactSku = req.query.exactSku as string;
     const category = req.query.category as string;
     const subCategory = req.query.subCategory as string;
     const tags = req.query.tags ? (req.query.tags as string).split(',') : undefined;
@@ -219,7 +220,7 @@ export const getAllProducts = async (req: Request, res: Response): Promise<void>
     const active = parseBooleanQuery(req.query.active);
     const homepageSticker = parseBooleanQuery(req.query.homepageSticker);
 
-    const result = await ProductService.getAllProducts(page, limit, search, category, subCategory, tags, featured, active, homepageSticker);
+    const result = await ProductService.getAllProducts(page, limit, search, category, subCategory, tags, featured, active, homepageSticker, exactSku);
 
     const isAdmin = req.user?.role === ADMIN_ROLE_CLAIM;
     let products;

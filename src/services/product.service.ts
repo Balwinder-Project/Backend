@@ -9,6 +9,7 @@ interface ProductQuery {
   isActive?: boolean;
   isFeatured?: boolean;
   isHomepageSticker?: boolean;
+  sku?: { $regex: string; $options: string };
   $or?: any[];
 }
 
@@ -71,7 +72,8 @@ export class ProductService {
     tagIds?: string[],
     featured?: boolean,
     isActive?: boolean,
-    homepageSticker?: boolean
+    homepageSticker?: boolean,
+    exactSku?: string
   ): Promise<{ products: IProduct[]; total: number; page: number; totalPages: number }> {
     const skip = (page - 1) * limit;
 
@@ -102,14 +104,20 @@ export class ProductService {
       query.isHomepageSticker = homepageSticker;
     }
 
-    const searchTerm = search?.trim();
-    if (searchTerm) {
-      const safeSearch = escapeRegex(searchTerm);
-      query.$or = [
-        { name: { $regex: safeSearch, $options: 'i' } },
-        { description: { $regex: safeSearch, $options: 'i' } },
-        { sku: { $regex: safeSearch, $options: 'i' } }
-      ];
+    const exactSkuTerm = exactSku?.trim();
+    if (exactSkuTerm) {
+      // Exact, case-insensitive SKU lookup avoids missing a code beyond a paginated general search.
+      query.sku = { $regex: `^${escapeRegex(exactSkuTerm)}$`, $options: 'i' };
+    } else {
+      const searchTerm = search?.trim();
+      if (searchTerm) {
+        const safeSearch = escapeRegex(searchTerm);
+        query.$or = [
+          { name: { $regex: safeSearch, $options: 'i' } },
+          { description: { $regex: safeSearch, $options: 'i' } },
+          { sku: { $regex: safeSearch, $options: 'i' } }
+        ];
+      }
     }
 
     const [products, total] = await Promise.all([
