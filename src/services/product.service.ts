@@ -9,6 +9,7 @@ interface ProductQuery {
   isActive?: boolean;
   isFeatured?: boolean;
   isHomepageSticker?: boolean;
+  sku?: { $regex: string; $options: string };
   $or?: any[];
 }
 
