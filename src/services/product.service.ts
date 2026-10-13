@@ -325,23 +325,24 @@ export class ProductService {
   static async previewBulkSubcategoryAssignment(data: {
     categoryId: string;
     subCategoryId: string;
-    skuPrefix?: string;
+    skuPrefix: string;
     limit?: number;
   }): Promise<{
     matchedCount: number;
     alreadyAssignedCount: number;
-    sample: { id: string; name: string; sku: string; image?: string; alreadyAssigned: boolean }[];
+    willReplaceCount: number;
+    sample: { id: string; name: string; sku: string; image?: string; alreadyAssigned: boolean; otherSubcategoryCount: number }[];
   }> {
+    if (!data.skuPrefix?.trim()) throw new Error('SKU search is required for exclusive subcategory assignment');
     await this.checkCategoryExistsOrThrow(data.categoryId);
     const subCategory = await SubCategory.findOne({ _id: data.subCategoryId, category: data.categoryId });
     if (!subCategory) throw new Error('Subcategory not found or does not belong to the selected category');
 
-    const filter: Record<string, unknown> = { category: data.categoryId };
-    if (data.skuPrefix?.trim()) {
-      // Match the entered text anywhere in the SKU so an admin can enter
-      // "BULLET" and match SKUs such as "2627BULLET0001".
-      filter.sku = { $regex: escapeRegex(data.skuPrefix.trim()), $options: 'i' };
-    }
+    // SKU search is required to prevent accidentally assigning the entire category.
+    const filter: Record<string, unknown> = {
+      category: data.categoryId,
+      sku: { $regex: escapeRegex(data.skuPrefix.trim()), $options: 'i' },
+    };
 
     const limit = Math.min(Math.max(data.limit || 10000, 1), 10000);
     const [matchedCount, products] = await Promise.all([
@@ -354,48 +355,51 @@ export class ProductService {
     ]);
 
     const subId = String(data.subCategoryId);
+    const otherSubcategoryCount = (product: any) =>
+      (product.subCategories || []).filter((id: any) => String(id) !== subId).length;
     const alreadyAssignedCount = products.filter((p: any) => (p.subCategories || []).some((id: any) => String(id) === subId)).length;
+    const willReplaceCount = products.filter((p: any) => otherSubcategoryCount(p) > 0).length;
     return {
       matchedCount,
       alreadyAssignedCount,
+      willReplaceCount,
       sample: products.map((p: any) => ({
         id: String(p._id),
         name: p.name,
         sku: p.sku,
         image: p.designImage || p.images?.[0],
         alreadyAssigned: (p.subCategories || []).some((id: any) => String(id) === subId),
+        otherSubcategoryCount: otherSubcategoryCount(p),
       })),
     };
   }
 
   /**
-   * Assign all products matching category + optional SKU prefix to a subcategory.
-   * Existing subcategory assignments are preserved.
+   * Assign products in a specific SKU group to exactly one subcategory.
+   * Other subcategory assignments on matched products are replaced.
    */
   static async bulkAssignSubcategory(data: {
     categoryId: string;
     subCategoryId: string;
-    skuPrefix?: string;
-  }): Promise<{ matchedCount: number; modifiedCount: number; filter: Record<string, unknown> }> {
+    skuPrefix: string;
+  }): Promise<{ matchedCount: number; modifiedCount: number; removedStaleAssignments: number; filter: Record<string, unknown> }> {
+    if (!data.skuPrefix?.trim()) throw new Error('SKU search is required for exclusive subcategory assignment');
     await this.checkCategoryExistsOrThrow(data.categoryId);
     const subCategory = await SubCategory.findOne({ _id: data.subCategoryId, category: data.categoryId });
     if (!subCategory) throw new Error('Subcategory not found or does not belong to the selected category');
 
-    const filter: Record<string, unknown> = { category: data.categoryId };
-    if (data.skuPrefix?.trim()) {
-      // Match the entered text anywhere in the SKU so an admin can enter
-      // "BULLET" and match SKUs such as "2627BULLET0001".
-      filter.sku = { $regex: escapeRegex(data.skuPrefix.trim()), $options: 'i' };
-    }
+    const filter: Record<string, unknown> = {
+      category: data.categoryId,
+      sku: { $regex: escapeRegex(data.skuPrefix.trim()), $options: 'i' },
+    };
 
-    // If a SKU prefix is supplied, first remove this subcategory from products
+    // First remove this subcategory from products
     // in the same parent category that do NOT match the selected SKU group.
     // Otherwise stale assignments remain on unrelated products (for example,
     // tank stickers continue appearing on a shocker category page).
     let removedStaleAssignments = 0;
-    if (data.skuPrefix?.trim()) {
-      const safePrefix = escapeRegex(data.skuPrefix.trim());
-      const cleanupResult = await Product.updateMany(
+    const safePrefix = escapeRegex(data.skuPrefix.trim());
+    const cleanupResult = await Product.updateMany(
         {
           category: data.categoryId,
           subCategories: data.subCategoryId,
@@ -404,8 +408,7 @@ export class ProductService {
         { $pull: { subCategories: data.subCategoryId } },
         { runValidators: true }
       );
-      removedStaleAssignments = cleanupResult.modifiedCount;
-    }
+    removedStaleAssignments = cleanupResult.modifiedCount;
 
     // The matched SKU group belongs only to the selected subcategory.
     const result = await Product.updateMany(
