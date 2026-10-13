@@ -329,8 +329,8 @@ export const previewBulkSubcategoryAssignment = async (req: Request, res: Respon
       res.status(400).json({ success: false, message: 'categoryId and subCategoryId are required' });
       return;
     }
-    if (skuPrefix !== undefined && (typeof skuPrefix !== 'string' || !skuPrefix.trim())) {
-      res.status(400).json({ success: false, message: 'skuPrefix must be a non-empty string when provided' });
+    if (typeof skuPrefix !== 'string' || !skuPrefix.trim()) {
+      res.status(400).json({ success: false, message: 'SKU search is required for exclusive subcategory assignment' });
       return;
     }
     if (!hasAdminPermission(req.user, 'OWNER')) {
@@ -340,7 +340,7 @@ export const previewBulkSubcategoryAssignment = async (req: Request, res: Respon
     const result = await ProductService.previewBulkSubcategoryAssignment({
       categoryId,
       subCategoryId,
-      skuPrefix: typeof skuPrefix === 'string' ? skuPrefix.trim() : undefined,
+      skuPrefix: skuPrefix.trim(),
       limit: typeof limit === 'number' ? limit : undefined,
     });
     res.status(200).json({ success: true, data: result });
