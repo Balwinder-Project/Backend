@@ -73,7 +73,9 @@ export const uploadImageToB2 = async (
     return `${B2_PUBLIC_URL}/${key}.webp`;
   } catch (error) {
     console.error('Error uploading image to B2:', error);
-    throw new Error('Failed to upload image');
+    // Preserve the original storage/image-processing error so the API can log and
+    // report the real cause instead of hiding it behind a generic message.
+    throw error instanceof Error ? error : new Error('Unknown B2 upload error');
   }
 };
 
