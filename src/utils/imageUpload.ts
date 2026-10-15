@@ -4,6 +4,10 @@ import { randomUUID } from 'crypto';
 import sharp from 'sharp';
 import { applyWatermark } from './watermark';
 
+// Keep uploads bounded for memory safety while allowing high-resolution print artwork.
+const MAX_INPUT_PIXELS = 100_000_000;
+const openImage = (fileBuffer: Buffer) => sharp(fileBuffer, { limitInputPixels: MAX_INPUT_PIXELS });
+
 /**
  * Upload image to Backblaze B2
  * Uploads three variants:
@@ -24,15 +28,15 @@ export const uploadImageToB2 = async (
       .substring(0, 64);
     const key = `balwinder/${folder}/${randomUUID()}-${baseName}`;
 
-    // Process original: convert to webp with auto quality
-    const originalBuffer = await sharp(fileBuffer)
+    // Process original: convert to webp with auto quality, preserving source dimensions.
+    const originalBuffer = await openImage(fileBuffer)
       .webp({ quality: 80 })
       .toBuffer();
 
     // Process thumbnail inside a 400x400 boundary without cropping.
     // Cover-cropping removes the top/bottom or sides of sticker sheets,
     // and CSS object-contain cannot recover pixels already removed here.
-    const thumbBuffer = await sharp(fileBuffer)
+    const thumbBuffer = await openImage(fileBuffer)
       .resize(400, 400, { fit: 'inside', withoutEnlargement: true })
       .webp({ quality: 70 })
       .toBuffer();
@@ -117,8 +121,8 @@ export const deleteImageFromB2 = async (imageUrl: string): Promise<void> => {
     }
 
     // Derive sibling variant keys: file.webp -> file-thumb.webp / file-wm.webp
-    const thumbKey = key.replace(/\.webp$/, '-thumb.webp');
-    const watermarkKey = key.replace(/\.webp$/, '-wm.webp');
+    const thumbKey = key.replace(/\\.webp$/, '-thumb.webp');
+    const watermarkKey = key.replace(/\\.webp$/, '-wm.webp');
 
     await Promise.all([
       s3Client.send(new DeleteObjectCommand({ Bucket: B2_BUCKET_NAME, Key: key })),
