@@ -25,6 +25,8 @@ const GAP_Y_RATIO = 2.2;
 const ANGLE_DEG = -30;
 
 const TRANSPARENT = { r: 0, g: 0, b: 0, alpha: 0 };
+// Match the upload pipeline's limit so high-resolution print artwork can be watermarked.
+const MAX_INPUT_PIXELS = 100_000_000;
 
 /**
  * Build one logo tile (colours preserved) sized to the base width, faded to the
@@ -61,7 +63,7 @@ const buildTile = async (
  * @param fileBuffer Raw source image bytes (any format sharp can read).
  */
 export const applyWatermark = async (fileBuffer: Buffer): Promise<Buffer> => {
-  const meta = await sharp(fileBuffer).metadata();
+  const meta = await sharp(fileBuffer, { limitInputPixels: MAX_INPUT_PIXELS }).metadata();
   const baseWidth = meta.width || 800;
   const baseHeight = meta.height || 800;
 
@@ -112,7 +114,7 @@ export const applyWatermark = async (fileBuffer: Buffer): Promise<Buffer> => {
     .png()
     .toBuffer();
 
-  return sharp(fileBuffer)
+  return sharp(fileBuffer, { limitInputPixels: MAX_INPUT_PIXELS })
     .composite([{ input: watermarkLayer, top: 0, left: 0 }])
     .webp({ quality: 80 })
     .toBuffer();
