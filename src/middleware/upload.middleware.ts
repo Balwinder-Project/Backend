@@ -23,7 +23,7 @@ export const upload = multer({
   storage,
   fileFilter,
   limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB limit per file; matches the name-plate editor upload limit
+    fileSize: 5 * 1024 * 1024, // 5MB limit per file
   },
 });
 
