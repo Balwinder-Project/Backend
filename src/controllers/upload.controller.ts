@@ -33,8 +33,8 @@ export const uploadSingleImage = async (req: Request, res: Response): Promise<vo
     console.error('Error uploading image:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to upload image',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      message: error?.message || 'Failed to upload image',
+      error: error?.code || error?.name || 'UPLOAD_FAILED'
     });
   }
 };
