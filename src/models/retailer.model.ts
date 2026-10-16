@@ -15,6 +15,8 @@ export interface IRetailerCategoryDiscount {
   slabs: IRetailerCategorySlab[];
 }
 
+export interface IRetailerProductPrice { productId: mongoose.Types.ObjectId; slabs: Array<{ minQuantity: number; price: number }>; }
+
 export interface IRetailer extends Document {
   name: string;
   city: string;
@@ -24,6 +26,7 @@ export interface IRetailer extends Document {
   phone: string;
   firebaseUid: string;
   categoryDiscounts: IRetailerCategoryDiscount[];
+  productPrices: IRetailerProductPrice[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -78,6 +81,14 @@ const retailerSchema = new Schema<IRetailer>(
       required: [true, 'Firebase UID is required'],
       unique: true,
       index: true
+    },
+    // SKU-specific wholesaler prices; product base price remains on the product record.
+    productPrices: {
+      type: [{
+        productId: { type: Schema.Types.ObjectId, ref: 'Product', required: true },
+        slabs: { type: [{ minQuantity: { type: Number, required: true, min: 1 }, price: { type: Number, required: true, min: 0 } }], default: [] },
+      }],
+      default: [],
     },
     // Per-category quantity-slab percentage discounts for this retailer.
     categoryDiscounts: {

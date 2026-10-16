@@ -2,6 +2,8 @@ import { auth } from '../config/firebase';
 import Retailer, { IRetailer } from '../models/retailer.model';
 import { WalletService } from './wallet.service';
 
+type RetailerProductPriceInput = { productId: string; slabs: Array<{ minQuantity: number; price: number }> };
+
 type RetailerCategoryDiscountInput = {
   category: string;
   slabs: Array<{ minQuantity: number; discountPercentage: number; referencePrice?: number; wholesalerPrice?: number }>;
@@ -16,6 +18,7 @@ interface CreateRetailerData {
   phone: string;
   password: string;
   categoryDiscounts?: RetailerCategoryDiscountInput[];
+  productPrices?: RetailerProductPriceInput[];
 }
 
 interface UpdateRetailerData {
@@ -27,6 +30,7 @@ interface UpdateRetailerData {
   phone?: string;
   password?: string;
   categoryDiscounts?: RetailerCategoryDiscountInput[];
+  productPrices?: RetailerProductPriceInput[];
 }
 
 export class RetailerService {
@@ -61,7 +65,8 @@ export class RetailerService {
         email: data.email,
         phone: data.phone,
         firebaseUid: userRecord.uid,
-        categoryDiscounts: data.categoryDiscounts || []
+        categoryDiscounts: data.categoryDiscounts || [],
+        productPrices: data.productPrices || []
       });
 
       // Create wallet for the new retailer
@@ -181,6 +186,7 @@ export class RetailerService {
       if (data.email) updateData.email = data.email;
       if (data.phone) updateData.phone = data.phone;
       if (data.categoryDiscounts !== undefined) updateData.categoryDiscounts = data.categoryDiscounts;
+      if (data.productPrices !== undefined) updateData.productPrices = data.productPrices;
 
       const updatedRetailer = await Retailer.findByIdAndUpdate(
         id,

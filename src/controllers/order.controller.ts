@@ -16,6 +16,7 @@ interface BuyerPricing {
   role: PricingRole;
   retailerId: string | null;
   retailerCategoryDiscounts: RetailerCategoryDiscount[];
+  retailerProductPrices: Array<{ productId: string; slabs: Array<{ minQuantity: number; price: number }> }>;
 }
 
 /** Resolve the buyer's pricing role, retailer id, and negotiated category discounts. */
@@ -32,12 +33,16 @@ const resolvePricingContext = async (firebaseUid: string): Promise<BuyerPricing>
           })),
         })
       );
-      return { role: 'retailer', retailerId: String(retailer._id), retailerCategoryDiscounts };
+      const retailerProductPrices = (retailer.productPrices || []).map((entry: any) => ({
+        productId: String(entry.productId),
+        slabs: (entry.slabs || []).map((s: any) => ({ minQuantity: s.minQuantity, price: s.price })),
+      }));
+      return { role: 'retailer', retailerId: String(retailer._id), retailerCategoryDiscounts, retailerProductPrices };
     }
   } catch {
     /* fall through to normal pricing */
   }
-  return { role: 'normal', retailerId: null, retailerCategoryDiscounts: [] };
+  return { role: 'normal', retailerId: null, retailerCategoryDiscounts: [], retailerProductPrices: [] };
 };
 
 const PICKUP_POSTCODE = process.env.SHIPROCKET_PICKUP_POSTCODE || '';
@@ -234,6 +239,7 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
         role: buyer.role,
         retailerId: buyer.retailerId,
         retailerCategoryDiscounts: buyer.retailerCategoryDiscounts,
+        retailerProductPrices: buyer.retailerProductPrices,
         categoryCampaignPercent: campaignPercents.get(String(product.category)) || 0,
         categoryQuantity: categoryTotals.get(String(product.category)) || quantity,
       });
