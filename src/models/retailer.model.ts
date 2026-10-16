@@ -5,6 +5,8 @@ import { INDIAN_STATES } from '../constants/indian-states';
 export interface IRetailerCategorySlab {
   minQuantity: number;
   discountPercentage: number;
+  referencePrice?: number;
+  wholesalerPrice?: number;
 }
 
 /** Per-category quantity-slab discounts negotiated for a specific retailer. */
@@ -92,6 +94,9 @@ const retailerSchema = new Schema<IRetailer>(
                   min: [0, 'Percentage cannot be negative'],
                   max: [100, 'Percentage cannot exceed 100'],
                 },
+                // Optional price pair used by admin UI to calculate the saved percentage.
+                referencePrice: { type: Number, min: [0, 'Reference price cannot be negative'] },
+                wholesalerPrice: { type: Number, min: [0, 'Wholesaler price cannot be negative'] },
               },
             ],
             default: [],
