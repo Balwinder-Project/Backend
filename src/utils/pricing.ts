@@ -13,6 +13,7 @@ export interface PricingContext {
   retailerId?: string | null;
   /** The retailer's negotiated per-category discount slabs (retailer role only). */
   retailerCategoryDiscounts?: RetailerCategoryDiscount[];
+  retailerProductPrices?: Array<{ productId: string; slabs: IPricingSlab[] }>;
   /** Active category campaign % for THIS product's category (normal role only). */
   categoryCampaignPercent?: number;
   /**
@@ -64,7 +65,12 @@ export const getEffectiveUnitPrice = (
   ctx: PricingContext
 ): number => {
   if (ctx.role === 'retailer') {
-    // 1. Per-product special pricing for this retailer.
+    // 1. Explicit SKU-specific price slabs saved on the retailer record.
+    const skuPrices = ctx.retailerProductPrices?.find((entry) => String(entry.productId) === String(product._id));
+    const skuPrice = matchingSlabPrice(skuPrices?.slabs, quantity);
+    if (skuPrice !== null) return skuPrice;
+
+    // 2. Per-product special pricing for this retailer.
     if (ctx.retailerId && Array.isArray(product.retailerSpecialPricing)) {
       const special = product.retailerSpecialPricing.find(
         (s) => String(s.retailer) === String(ctx.retailerId)
@@ -73,7 +79,7 @@ export const getEffectiveUnitPrice = (
       if (specialPrice !== null) return specialPrice;
     }
 
-    // 2. Retailer's negotiated per-category percentage slab (off base price).
+    // 3. Retailer's negotiated per-category percentage slab (off base price).
     //    Matched against the whole-cart category quantity, not the line qty.
     const catDiscount = ctx.retailerCategoryDiscounts?.find(
       (d) => String(d.category) === String(product.category)
@@ -84,7 +90,7 @@ export const getEffectiveUnitPrice = (
       return round2(product.price * (1 - discountPct / 100));
     }
 
-    // 3. Global wholesale slabs.
+    // 4. Global wholesale slabs.
     const wholesale = matchingSlabPrice(product.retailerPricing?.slabs, quantity);
     if (wholesale !== null) return wholesale;
 
