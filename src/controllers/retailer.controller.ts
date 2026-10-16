@@ -168,7 +168,7 @@ export const getRetailerById = async (req: Request, res: Response): Promise<void
 export const updateRetailer = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const { name, city, state, pincode, email, phone, password, categoryDiscounts } = req.body;
+    const { name, city, state, pincode, email, phone, password, categoryDiscounts, productPrices } = req.body;
 
     const retailer = await RetailerService.updateRetailer(id, {
       name,
@@ -178,7 +178,8 @@ export const updateRetailer = async (req: Request, res: Response): Promise<void>
       email,
       phone,
       password,
-      categoryDiscounts
+      categoryDiscounts,
+      productPrices
     });
 
     if (!retailer) {
