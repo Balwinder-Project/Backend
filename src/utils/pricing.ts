@@ -5,7 +5,7 @@ export type PricingRole = 'retailer' | 'normal';
 /** Retailer per-category percentage slabs, passed in from the retailer record. */
 export interface RetailerCategoryDiscount {
   category: string;
-  slabs: Array<{ minQuantity: number; discountPercentage: number }>;
+  slabs: Array<{ minQuantity: number; discountPercentage: number; referencePrice?: number; wholesalerPrice?: number }>;
 }
 
 export interface PricingContext {
@@ -36,7 +36,7 @@ const matchingSlabPrice = (slabs: IPricingSlab[] | undefined, quantity: number):
 
 /** Highest discount % from the matching quantity slab. Null if none match. */
 const matchingDiscountPercent = (
-  slabs: Array<{ minQuantity: number; discountPercentage: number }> | undefined,
+  slabs: Array<{ minQuantity: number; discountPercentage: number; referencePrice?: number; wholesalerPrice?: number }> | undefined,
   quantity: number
 ): number | null => {
   if (!Array.isArray(slabs) || slabs.length === 0) return null;
@@ -116,7 +116,7 @@ export const getMinOrderQuantity = (
  */
 export const retailerCategorySlabsToPrices = (
   basePrice: number,
-  slabs: Array<{ minQuantity: number; discountPercentage: number }>
+  slabs: Array<{ minQuantity: number; discountPercentage: number; referencePrice?: number; wholesalerPrice?: number }>
 ): IPricingSlab[] =>
   (slabs || []).map((s) => ({
     minQuantity: s.minQuantity,
