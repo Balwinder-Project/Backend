@@ -4,7 +4,7 @@ import { WalletService } from './wallet.service';
 
 type RetailerCategoryDiscountInput = {
   category: string;
-  slabs: Array<{ minQuantity: number; discountPercentage: number }>;
+  slabs: Array<{ minQuantity: number; discountPercentage: number; referencePrice?: number; wholesalerPrice?: number }>;
 };
 
 interface CreateRetailerData {
