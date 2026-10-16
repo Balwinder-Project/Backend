@@ -42,7 +42,11 @@ const matchingDiscountPercent = (
   if (!Array.isArray(slabs) || slabs.length === 0) return null;
   const sorted = [...slabs].sort((a, b) => b.minQuantity - a.minQuantity);
   const match = sorted.find((s) => quantity >= s.minQuantity);
-  return match ? match.discountPercentage : null;
+  if (!match) return null;
+  if (match.referencePrice != null && match.wholesalerPrice != null && match.referencePrice > 0) {
+    return round2(Math.max(0, Math.min(100, ((match.referencePrice - match.wholesalerPrice) / match.referencePrice) * 100)));
+  }
+  return match.discountPercentage;
 };
 
 /**
