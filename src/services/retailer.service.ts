@@ -30,6 +30,7 @@ interface UpdateRetailerData {
   phone?: string;
   password?: string;
   categoryDiscounts?: RetailerCategoryDiscountInput[];
+  productPrices?: RetailerProductPriceInput[];
 }
 
 export class RetailerService {
