@@ -35,13 +35,21 @@ const resolveBuyerPricing = (obj: any, retailer: any | null, campaignPercents: M
 
   if (retailer) {
     const retailerId = String(retailer._id);
+    const productId = String(obj.id || obj._id || '');
+    const skuPrice = (retailer.productPrices || []).find((entry: any) => String(entry.productId) === productId);
+    if (skuPrice && Array.isArray(skuPrice.slabs) && skuPrice.slabs.length > 0) {
+      obj.retailerSkuPricing = {
+        slabs: skuPrice.slabs.map((s: any) => ({ minQuantity: s.minQuantity, price: s.price })),
+      };
+    }
+
     const match = special.find((s: any) => String(s.retailer) === retailerId);
     if (match && Array.isArray(match.slabs) && match.slabs.length > 0) {
       obj.retailerPricing = { minimumOrderQuantity: match.minimumOrderQuantity ?? 1, slabs: match.slabs };
+      obj.retailerSpecialPricingApplied = true;
     } else {
-      // Attach the retailer's category-discount slabs (raw %). The discount is
-      // based on the whole-cart quantity for this category, so it's applied at
-      // cart/checkout time on the client and re-verified in createOrder.
+      // Attach category and subcategory discount rules for the storefront.
+      // Cart totals determine which quantity slab applies; checkout re-verifies it.
       const productSubcategories = (obj.subCategories || []).map((id: any) =>
         String(typeof id === 'object' ? (id.id || id._id || '') : id)
       );
