@@ -247,7 +247,7 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
         retailerProductPrices: buyer.retailerProductPrices,
         categoryCampaignPercent: campaignPercents.get(String(product.category)) || 0,
         categoryQuantity: categoryTotals.get(String(product.category)) || quantity,
-        subCategoryQuantity: Math.max(...(product.subCategories || []).map((id: any) => subCategoryTotals.get(String(id)) || 0), quantity),
+        subCategoryQuantities: Object.fromEntries((product.subCategories || []).map((id: any) => [String(id), subCategoryTotals.get(String(id)) || 0])),
       });
       return {
         productId: new mongoose.Types.ObjectId(item.productId),
