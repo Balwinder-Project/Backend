@@ -12,6 +12,8 @@ export interface IRetailerCategorySlab {
 /** Per-category quantity-slab discounts negotiated for a specific retailer. */
 export interface IRetailerCategoryDiscount {
   category: mongoose.Types.ObjectId;
+  /** When set, this rule applies only to products in this subcategory. */
+  subCategory?: mongoose.Types.ObjectId;
   slabs: IRetailerCategorySlab[];
 }
 
@@ -95,6 +97,7 @@ const retailerSchema = new Schema<IRetailer>(
       type: [
         {
           category: { type: Schema.Types.ObjectId, ref: 'Category', required: true },
+          subCategory: { type: Schema.Types.ObjectId, ref: 'SubCategory' },
           slabs: {
             type: [
               {
