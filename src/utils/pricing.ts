@@ -5,6 +5,8 @@ export type PricingRole = 'retailer' | 'normal';
 /** Retailer per-category percentage slabs, passed in from the retailer record. */
 export interface RetailerCategoryDiscount {
   category: string;
+  /** Present when this discount is limited to a specific subcategory. */
+  subCategory?: string;
   slabs: Array<{ minQuantity: number; discountPercentage: number; referencePrice?: number; wholesalerPrice?: number }>;
 }
 
@@ -23,6 +25,8 @@ export interface PricingContext {
    * Falls back to the line quantity when omitted.
    */
   categoryQuantity?: number;
+  /** Total quantity for the matching subcategory across the cart/order. */
+  subCategoryQuantity?: number;
 }
 
 const round2 = (n: number): number => Math.round(n * 100) / 100;
@@ -79,10 +83,22 @@ export const getEffectiveUnitPrice = (
       if (specialPrice !== null) return specialPrice;
     }
 
-    // 3. Retailer's negotiated per-category percentage slab (off base price).
+    // 3. Subcategory-specific percentage discount takes priority over the
+    //    broader category rule. Match whole-cart quantity for that subcategory.
+    const productSubcategories = (product.subCategories || []).map((id: any) => String(id));
+    const subCategoryDiscount = ctx.retailerCategoryDiscounts?.find(
+      (d) => Boolean(d.subCategory) && String(d.category) === String(product.category) && productSubcategories.includes(String(d.subCategory))
+    );
+    const subCategoryQty = ctx.subCategoryQuantity ?? quantity;
+    const subCategoryPct = subCategoryDiscount ? matchingDiscountPercent(subCategoryDiscount.slabs, subCategoryQty) : null;
+    if (subCategoryPct !== null && subCategoryPct > 0) {
+      return round2(product.price * (1 - subCategoryPct / 100));
+    }
+
+    // 4. Retailer's negotiated category-wide percentage slab (off base price).
     //    Matched against the whole-cart category quantity, not the line qty.
     const catDiscount = ctx.retailerCategoryDiscounts?.find(
-      (d) => String(d.category) === String(product.category)
+      (d) => !d.subCategory && String(d.category) === String(product.category)
     );
     const categoryQty = ctx.categoryQuantity ?? quantity;
     const discountPct = catDiscount ? matchingDiscountPercent(catDiscount.slabs, categoryQty) : null;
@@ -90,7 +106,7 @@ export const getEffectiveUnitPrice = (
       return round2(product.price * (1 - discountPct / 100));
     }
 
-    // 4. Global wholesale slabs.
+    // 5. Global wholesale slabs.
     const wholesale = matchingSlabPrice(product.retailerPricing?.slabs, quantity);
     if (wholesale !== null) return wholesale;
 
