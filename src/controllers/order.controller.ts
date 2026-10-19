@@ -27,6 +27,7 @@ const resolvePricingContext = async (firebaseUid: string): Promise<BuyerPricing>
       const retailerCategoryDiscounts: RetailerCategoryDiscount[] = (retailer.categoryDiscounts || []).map(
         (d: any) => ({
           category: String(d.category),
+          ...(d.subCategory && { subCategory: String(d.subCategory) }),
           slabs: (d.slabs || []).map((s: any) => ({
             minQuantity: s.minQuantity,
             discountPercentage: s.discountPercentage,
@@ -221,12 +222,16 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
     // Total quantity per category across the order — retailer category-discount
     // slabs are matched against this (whole-cart), not the per-line quantity.
     const categoryTotals = new Map<string, number>();
+    const subCategoryTotals = new Map<string, number>();
     for (const item of items) {
       const product = products.find((p) => (p._id as any).toString() === item.productId);
       if (!product) continue;
       const qty = Math.max(1, Math.floor(Number(item.quantity) || 0));
       const key = String(product.category);
       categoryTotals.set(key, (categoryTotals.get(key) || 0) + qty);
+      for (const subCategoryId of (product.subCategories || []).map((id: any) => String(id))) {
+        subCategoryTotals.set(subCategoryId, (subCategoryTotals.get(subCategoryId) || 0) + qty);
+      }
     }
 
     const orderItems: IOrderItem[] = items.map((item) => {
@@ -242,6 +247,7 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
         retailerProductPrices: buyer.retailerProductPrices,
         categoryCampaignPercent: campaignPercents.get(String(product.category)) || 0,
         categoryQuantity: categoryTotals.get(String(product.category)) || quantity,
+        subCategoryQuantity: Math.max(...(product.subCategories || []).map((id: any) => subCategoryTotals.get(String(id)) || 0), quantity),
       });
       return {
         productId: new mongoose.Types.ObjectId(item.productId),
