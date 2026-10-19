@@ -27,6 +27,8 @@ export interface PricingContext {
   categoryQuantity?: number;
   /** Total quantity for the matching subcategory across the cart/order. */
   subCategoryQuantity?: number;
+  /** Whole-cart quantities keyed by subcategory id. */
+  subCategoryQuantities?: Record<string, number>;
 }
 
 const round2 = (n: number): number => Math.round(n * 100) / 100;
@@ -89,7 +91,9 @@ export const getEffectiveUnitPrice = (
     const subCategoryDiscount = ctx.retailerCategoryDiscounts?.find(
       (d) => Boolean(d.subCategory) && String(d.category) === String(product.category) && productSubcategories.includes(String(d.subCategory))
     );
-    const subCategoryQty = ctx.subCategoryQuantity ?? quantity;
+    const subCategoryQty = subCategoryDiscount
+      ? (ctx.subCategoryQuantities?.[String(subCategoryDiscount.subCategory)] ?? ctx.subCategoryQuantity ?? quantity)
+      : quantity;
     const subCategoryPct = subCategoryDiscount ? matchingDiscountPercent(subCategoryDiscount.slabs, subCategoryQty) : null;
     if (subCategoryPct !== null && subCategoryPct > 0) {
       return round2(product.price * (1 - subCategoryPct / 100));
