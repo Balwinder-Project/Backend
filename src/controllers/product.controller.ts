@@ -47,8 +47,8 @@ const resolveBuyerPricing = (obj: any, retailer: any | null, campaignPercents: M
     if (match && Array.isArray(match.slabs) && match.slabs.length > 0) {
       obj.retailerPricing = { minimumOrderQuantity: match.minimumOrderQuantity ?? 1, slabs: match.slabs };
       obj.retailerSpecialPricingApplied = true;
-    } else {
-      // Attach category and subcategory discount rules for the storefront.
+    }
+    // Attach category and subcategory discount rules for the storefront.
       // Cart totals determine which quantity slab applies; checkout re-verifies it.
       const productSubcategories = (obj.subCategories || []).map((id: any) =>
         String(typeof id === 'object' ? (id.id || id._id || '') : id)
@@ -81,7 +81,6 @@ const resolveBuyerPricing = (obj: any, retailer: any | null, campaignPercents: M
           })),
         };
       }
-    }
     obj.categoryCampaignPercent = 0; // retailers keep their own pricing
   } else {
     obj.categoryCampaignPercent = campaignPercents.get(categoryId) || 0;
