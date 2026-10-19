@@ -21,8 +21,8 @@ const productCategoryId = (obj: any): string => {
 
 /**
  * Resolve pricing for a public (non-admin) product response.
- *  - Retailer: per-product special slabs → their per-category % discount (as
- *    absolute slabs) → global wholesale slabs. retailerSpecialPricing is always
+ *  - Retailer: per-product special slabs → subcategory/category % discounts
+ *    → global wholesale slabs. retailerSpecialPricing is always
  *    stripped so no retailer sees another's negotiated prices.
  *  - Normal / guest: attach the active category campaign %.
  * @param obj  A product plain object (post toJSON).
@@ -42,8 +42,27 @@ const resolveBuyerPricing = (obj: any, retailer: any | null, campaignPercents: M
       // Attach the retailer's category-discount slabs (raw %). The discount is
       // based on the whole-cart quantity for this category, so it's applied at
       // cart/checkout time on the client and re-verified in createOrder.
+      const productSubcategories = (obj.subCategories || []).map((id: any) =>
+        String(typeof id === 'object' ? (id.id || id._id || '') : id)
+      );
+      const subcategoryDiscount = (retailer.categoryDiscounts || []).find(
+        (d: any) => Boolean(d.subCategory) &&
+          String(d.category) === categoryId &&
+          productSubcategories.includes(String(typeof d.subCategory === 'object' ? (d.subCategory.id || d.subCategory._id || '') : d.subCategory))
+      );
+      if (subcategoryDiscount && Array.isArray(subcategoryDiscount.slabs) && subcategoryDiscount.slabs.length > 0) {
+        obj.retailerSubcategoryDiscount = {
+          category: categoryId,
+          subCategory: String(typeof subcategoryDiscount.subCategory === 'object' ? (subcategoryDiscount.subCategory.id || subcategoryDiscount.subCategory._id || '') : subcategoryDiscount.subCategory),
+          slabs: subcategoryDiscount.slabs.map((s: any) => ({
+            minQuantity: s.minQuantity,
+            discountPercentage: s.discountPercentage,
+          })),
+        };
+      }
+
       const catDiscount = (retailer.categoryDiscounts || []).find(
-        (d: any) => String(d.category) === categoryId
+        (d: any) => !d.subCategory && String(d.category) === categoryId
       );
       if (catDiscount && Array.isArray(catDiscount.slabs) && catDiscount.slabs.length > 0) {
         obj.retailerCategoryDiscount = {
