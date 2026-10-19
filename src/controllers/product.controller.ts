@@ -51,13 +51,13 @@ const resolveBuyerPricing = (obj: any, retailer: any | null, campaignPercents: M
     // Attach category and subcategory discount rules for the storefront.
     // Cart totals determine which quantity slab applies; checkout re-verifies it.
     const productSubcategories = (obj.subCategories || []).map((id: any) =>
-        String(typeof id === 'object' ? (id.id || id._id || '') : id)
-      );
+      String(typeof id === 'object' ? (id.id || id._id || '') : id)
+    );
     const subcategoryDiscount = (retailer.categoryDiscounts || []).find(
-        (d: any) => Boolean(d.subCategory) &&
-          String(d.category) === categoryId &&
-          productSubcategories.includes(String(typeof d.subCategory === 'object' ? (d.subCategory.id || d.subCategory._id || '') : d.subCategory))
-      );
+      (d: any) => Boolean(d.subCategory) &&
+        String(d.category) === categoryId &&
+        productSubcategories.includes(String(typeof d.subCategory === 'object' ? (d.subCategory.id || d.subCategory._id || '') : d.subCategory))
+    );
     if (subcategoryDiscount && Array.isArray(subcategoryDiscount.slabs) && subcategoryDiscount.slabs.length > 0) {
       obj.retailerSubcategoryDiscount = {
         category: categoryId,
@@ -70,11 +70,11 @@ const resolveBuyerPricing = (obj: any, retailer: any | null, campaignPercents: M
     }
 
     const catDiscount = (retailer.categoryDiscounts || []).find(
-        (d: any) => !d.subCategory && String(d.category) === categoryId
-      );
+      (d: any) => !d.subCategory && String(d.category) === categoryId
+    );
     if (catDiscount && Array.isArray(catDiscount.slabs) && catDiscount.slabs.length > 0) {
       obj.retailerCategoryDiscount = {
-          category: categoryId,
+        category: categoryId,
         slabs: catDiscount.slabs.map((s: any) => ({
           minQuantity: s.minQuantity,
           discountPercentage: s.discountPercentage,
