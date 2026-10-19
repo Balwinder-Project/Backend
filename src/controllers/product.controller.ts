@@ -49,38 +49,38 @@ const resolveBuyerPricing = (obj: any, retailer: any | null, campaignPercents: M
       obj.retailerSpecialPricingApplied = true;
     }
     // Attach category and subcategory discount rules for the storefront.
-      // Cart totals determine which quantity slab applies; checkout re-verifies it.
-      const productSubcategories = (obj.subCategories || []).map((id: any) =>
+    // Cart totals determine which quantity slab applies; checkout re-verifies it.
+    const productSubcategories = (obj.subCategories || []).map((id: any) =>
         String(typeof id === 'object' ? (id.id || id._id || '') : id)
       );
-      const subcategoryDiscount = (retailer.categoryDiscounts || []).find(
+    const subcategoryDiscount = (retailer.categoryDiscounts || []).find(
         (d: any) => Boolean(d.subCategory) &&
           String(d.category) === categoryId &&
           productSubcategories.includes(String(typeof d.subCategory === 'object' ? (d.subCategory.id || d.subCategory._id || '') : d.subCategory))
       );
-      if (subcategoryDiscount && Array.isArray(subcategoryDiscount.slabs) && subcategoryDiscount.slabs.length > 0) {
-        obj.retailerSubcategoryDiscount = {
-          category: categoryId,
-          subCategory: String(typeof subcategoryDiscount.subCategory === 'object' ? (subcategoryDiscount.subCategory.id || subcategoryDiscount.subCategory._id || '') : subcategoryDiscount.subCategory),
-          slabs: subcategoryDiscount.slabs.map((s: any) => ({
-            minQuantity: s.minQuantity,
-            discountPercentage: s.discountPercentage,
-          })),
-        };
-      }
+    if (subcategoryDiscount && Array.isArray(subcategoryDiscount.slabs) && subcategoryDiscount.slabs.length > 0) {
+      obj.retailerSubcategoryDiscount = {
+        category: categoryId,
+        subCategory: String(typeof subcategoryDiscount.subCategory === 'object' ? (subcategoryDiscount.subCategory.id || subcategoryDiscount.subCategory._id || '') : subcategoryDiscount.subCategory),
+        slabs: subcategoryDiscount.slabs.map((s: any) => ({
+          minQuantity: s.minQuantity,
+          discountPercentage: s.discountPercentage,
+        })),
+      };
+    }
 
-      const catDiscount = (retailer.categoryDiscounts || []).find(
+    const catDiscount = (retailer.categoryDiscounts || []).find(
         (d: any) => !d.subCategory && String(d.category) === categoryId
       );
-      if (catDiscount && Array.isArray(catDiscount.slabs) && catDiscount.slabs.length > 0) {
-        obj.retailerCategoryDiscount = {
+    if (catDiscount && Array.isArray(catDiscount.slabs) && catDiscount.slabs.length > 0) {
+      obj.retailerCategoryDiscount = {
           category: categoryId,
-          slabs: catDiscount.slabs.map((s: any) => ({
-            minQuantity: s.minQuantity,
-            discountPercentage: s.discountPercentage,
-          })),
-        };
-      }
+        slabs: catDiscount.slabs.map((s: any) => ({
+          minQuantity: s.minQuantity,
+          discountPercentage: s.discountPercentage,
+        })),
+      };
+    }
     obj.categoryCampaignPercent = 0; // retailers keep their own pricing
   } else {
     obj.categoryCampaignPercent = campaignPercents.get(categoryId) || 0;
