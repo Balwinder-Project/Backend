@@ -65,7 +65,7 @@ export const uploadImageToB2 = async (
       uploads.push(
         s3Client.send(new PutObjectCommand({
           Bucket: B2_BUCKET_NAME,
-          Key: `${key}-wm.webp`,
+          Key: `${key}-wm-v2.webp`,
           Body: watermarkedBuffer,
           ContentType: 'image/webp',
         }))
