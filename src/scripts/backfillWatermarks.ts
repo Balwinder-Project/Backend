@@ -2,9 +2,9 @@
  * Backfill watermarked variants for existing product images.
  *
  * Older uploads only have `file.webp` + `file-thumb.webp` in B2. Now that the
- * public detail page serves `file-wm.webp`, existing products would 404 on their
+ * public detail page serves `file-wm-v2.webp`, existing products would 404 on their
  * images until this runs. For every product image, this downloads the original,
- * composites the watermark, and uploads the `-wm.webp` sibling.
+ * composites the watermark, and uploads the `-wm-v2.webp` sibling.
  *
  * Usage:
  *   npx ts-node src/scripts/backfillWatermarks.ts          # process all
@@ -59,7 +59,7 @@ const run = async () => {
         console.warn(`  ! Skipping non-B2 URL: ${imageUrl}`);
         continue;
       }
-      const wmKey = key.replace(/\.webp$/, '-wm.webp');
+      const wmKey = key.replace(/\.webp$/, '-wm-v2.webp');
 
       try {
         if (!FORCE && (await objectExists(wmKey))) {
