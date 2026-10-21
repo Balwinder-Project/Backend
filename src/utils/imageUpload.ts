@@ -123,11 +123,13 @@ export const deleteImageFromB2 = async (imageUrl: string): Promise<void> => {
     // Derive sibling variant keys: file.webp -> file-thumb.webp / file-wm.webp
     const thumbKey = key.replace(/\\.webp$/, '-thumb.webp');
     const watermarkKey = key.replace(/\\.webp$/, '-wm.webp');
+    const watermarkV2Key = key.replace(/\\.webp$/, '-wm-v2.webp');
 
     await Promise.all([
       s3Client.send(new DeleteObjectCommand({ Bucket: B2_BUCKET_NAME, Key: key })),
       s3Client.send(new DeleteObjectCommand({ Bucket: B2_BUCKET_NAME, Key: thumbKey })),
       s3Client.send(new DeleteObjectCommand({ Bucket: B2_BUCKET_NAME, Key: watermarkKey })),
+      s3Client.send(new DeleteObjectCommand({ Bucket: B2_BUCKET_NAME, Key: watermarkV2Key })),
     ]);
   } catch (error) {
     console.error('Error deleting image from B2:', error);
