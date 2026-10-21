@@ -8,9 +8,9 @@ import path from 'path';
 const WATERMARK_PATH = path.join(process.cwd(), 'assets', 'watermark.png');
 const WATERMARK_OPACITY = 0.65;
 // Denser diagonal logo tiling to match the approved reference artwork.
-const TILE_WIDTH_RATIO = 0.28;
-const GAP_X_RATIO = 0.15;
-const GAP_Y_RATIO = 0.7;
+const TILE_WIDTH_RATIO = 0.18;
+const GAP_X_RATIO = 0.12;
+const GAP_Y_RATIO = 0.45;
 const ANGLE_DEG = -30;
 const TRANSPARENT = { r: 0, g: 0, b: 0, alpha: 0 };
 // Allows high-resolution print artwork while retaining a defined safety limit.
