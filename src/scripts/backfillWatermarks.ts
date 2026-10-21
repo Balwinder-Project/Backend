@@ -47,6 +47,10 @@ const run = async () => {
   for (const product of products) {
     const images: string[] = (product as any).images || [];
     for (const imageUrl of images) {
+      // Never watermark mockup scenes or private design-request references.
+      // Public mockups intentionally bypass watermarked variants in imageTransform.ts.
+      if (imageUrl.includes('/mockups/') || imageUrl.includes('/design-requests/')) continue;
+
       // Only process originals; skip anything that already looks like a variant.
       if (!/\.webp$/.test(imageUrl) || /-(thumb|wm)\.webp$/.test(imageUrl)) continue;
 
