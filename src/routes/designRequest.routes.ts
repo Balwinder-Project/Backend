@@ -9,8 +9,7 @@ import {
 import {
   authenticateUser,
   optionalAuth,
-  requireAdmin,
-  requireModulePermission, 
+  requireModulePermission,
 } from '../middleware/auth.middleware';
 import { validateRequest } from '../middleware/validateRequest';
 import {
