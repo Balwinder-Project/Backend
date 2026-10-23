@@ -124,6 +124,7 @@ export const listAdminPermissions = async (_req: Request, res: Response): Promis
         displayName: user.displayName,
         disabled: user.disabled,
         adminRoles: normalizeAdminRoles(user.customClaims?.adminRoles),
+        permissions: user.customClaims?.permissions || {},
         createdAt: user.metadata.creationTime,
         lastSignInAt: user.metadata.lastSignInTime,
       }));
@@ -145,7 +146,7 @@ export const listAdminPermissions = async (_req: Request, res: Response): Promis
 export const updateAdminPermissions = async (req: Request, res: Response): Promise<void> => {
   try {
     const { uid } = req.params;
-    const { adminRoles } = req.body;
+    const { adminRoles, permissions } = req.body;
 
     if (!Array.isArray(adminRoles)) {
       res.status(400).json({
@@ -164,6 +165,21 @@ export const updateAdminPermissions = async (req: Request, res: Response): Promi
       return;
     }
 
+    if (permissions !== undefined && (!permissions || typeof permissions !== 'object' || Array.isArray(permissions))) {
+      res.status(400).json({ success: false, message: 'permissions must be an object' });
+      return;
+    }
+    const allowedActions = ['view', 'create', 'edit', 'delete', 'approve', 'export'];
+    const normalizedPermissions: Record<string, string[]> = {};
+    if (permissions !== undefined) {
+      for (const [moduleKey, actions] of Object.entries(permissions as Record<string, unknown>)) {
+        if (!Array.isArray(actions) || actions.some((action) => typeof action !== 'string' || !allowedActions.includes(action))) {
+          res.status(400).json({ success: false, message: 'Invalid actions for permission module: ' + moduleKey });
+          return;
+        }
+        normalizedPermissions[moduleKey] = Array.from(new Set(actions as string[]));
+      }
+    }
     const userRecord = await auth.getUser(uid);
     const existingClaims = userRecord.customClaims || {};
 
@@ -171,6 +187,7 @@ export const updateAdminPermissions = async (req: Request, res: Response): Promi
       ...existingClaims,
       role: 'admin',
       adminRoles: normalizedRoles,
+      ...(permissions !== undefined ? { permissions: normalizedPermissions } : {}),
     });
 
     res.status(200).json({
@@ -182,6 +199,7 @@ export const updateAdminPermissions = async (req: Request, res: Response): Promi
         displayName: userRecord.displayName,
         role: 'admin',
         adminRoles: normalizedRoles,
+        permissions: permissions !== undefined ? normalizedPermissions : (existingClaims.permissions || {}),
       },
     });
   } catch (error: any) {
