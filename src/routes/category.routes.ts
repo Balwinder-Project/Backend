@@ -8,7 +8,7 @@ import {
   updateCategory,
   deleteCategory
 } from '../controllers/category.controller';
-import { authenticateUser, requireAnyAdminPermission, requireModulePermission } from '../middleware/auth.middleware';
+import { authenticateUser, requireModulePermission } from '../middleware/auth.middleware';
 import { validateCategoryData, validateObjectId } from '../validators/category.validator';
 
 const router = Router();
