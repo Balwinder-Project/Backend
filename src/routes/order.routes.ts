@@ -11,7 +11,7 @@ import {
   retryShiprocketSync,
   shiprocketWebhook,
 } from '../controllers/order.controller';
-import { authenticateUser, requireAdmin, requireAnyAdminPermission } from '../middleware/auth.middleware';
+import { authenticateUser, requireAdmin, requireAnyAdminPermission, requireModulePermission } from '../middleware/auth.middleware';
 import { validateRequest } from '../middleware/validateRequest';
 import { shippingRatesValidator, createOrderValidator, updateOrderStatusValidator } from '../validators/order.validator';
 
@@ -27,12 +27,12 @@ router.post('/razorpay/create-order', authenticateUser, createRazorpayCheckoutOr
 
 // Admin read routes — Product Editor and Owner can view orders.
 // Keep these before /:id to prevent "admin" being parsed as an ObjectId.
-router.get('/admin/all', authenticateUser, requireAnyAdminPermission(['PRODUCT_EDITOR', 'OWNER']), getAllOrdersAdmin);
-router.get('/admin/:id', authenticateUser, requireAnyAdminPermission(['PRODUCT_EDITOR', 'OWNER']), getAdminOrderById);
+router.get('/admin/all', authenticateUser, requireModulePermission('orders', 'view', ['PRODUCT_EDITOR']), getAllOrdersAdmin);
+router.get('/admin/:id', authenticateUser, requireModulePermission('orders', 'view', ['PRODUCT_EDITOR']), getAdminOrderById);
 
 // Order-changing actions remain on the existing admin guard.
-router.put('/admin/:id/status', authenticateUser, requireAdmin, updateOrderStatusValidator, validateRequest, updateAdminOrderStatus);
-router.post('/admin/:id/shiprocket-retry', authenticateUser, requireAdmin, retryShiprocketSync);
+router.put('/admin/:id/status', authenticateUser, requireModulePermission('orders', 'edit'), updateOrderStatusValidator, validateRequest, updateAdminOrderStatus);
+router.post('/admin/:id/shiprocket-retry', authenticateUser, requireModulePermission('orders', 'edit'), retryShiprocketSync);
 
 router.get('/', authenticateUser, getUserOrders);
 router.get('/:id', authenticateUser, getOrderById);
