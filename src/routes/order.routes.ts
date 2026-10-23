@@ -11,7 +11,7 @@ import {
   retryShiprocketSync,
   shiprocketWebhook,
 } from '../controllers/order.controller';
-import { authenticateUser, requireAdmin, requireAnyAdminPermission, requireModulePermission } from '../middleware/auth.middleware';
+import { authenticateUser, requireModulePermission } from '../middleware/auth.middleware';
 import { validateRequest } from '../middleware/validateRequest';
 import { shippingRatesValidator, createOrderValidator, updateOrderStatusValidator } from '../validators/order.validator';
 
