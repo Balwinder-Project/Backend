@@ -196,3 +196,47 @@ export const requireAnyAdminPermission = (permissions: AdminPermission[]) => {
     }
   };
 };
+
+
+/**
+ * Enforce a module/action permission from the Permission Catalogue.
+ * Owners retain full access. For older accounts without a saved permission map,
+ * fall back to the existing role guard to avoid breaking existing staff.
+ * Once a module key is explicitly saved, its action list is authoritative.
+ */
+export const requireModulePermission = (
+  moduleKey: string,
+  action: 'view' | 'create' | 'edit' | 'delete' | 'approve' | 'export',
+  legacyRoles: AdminPermission[] = []
+) => {
+  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    if (!req.user || req.user.role !== 'admin') {
+      res.status(401).json({ success: false, message: 'Authentication required' });
+      return;
+    }
+
+    const roles = normalizeAdminRoles(req.user.adminRoles);
+    if (roles.includes('OWNER')) {
+      next();
+      return;
+    }
+
+    const permissions = req.user.permissions;
+    if (permissions && typeof permissions === 'object' && Object.prototype.hasOwnProperty.call(permissions, moduleKey)) {
+      const actions = permissions[moduleKey];
+      if (Array.isArray(actions) && actions.includes(action)) {
+        next();
+        return;
+      }
+      res.status(403).json({ success: false, message: 'Insufficient module permissions' });
+      return;
+    }
+
+    if (legacyRoles.length > 0 && hasAnyAdminPermission(req.user, legacyRoles)) {
+      next();
+      return;
+    }
+
+    res.status(403).json({ success: false, message: 'Insufficient permissions' });
+  };
+};
