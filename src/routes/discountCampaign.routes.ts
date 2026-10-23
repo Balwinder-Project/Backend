@@ -5,7 +5,7 @@ import {
   updateCampaign,
   deleteCampaign,
 } from '../controllers/discountCampaign.controller';
-import { authenticateUser, requireAnyAdminPermission, requireModulePermission } from '../middleware/auth.middleware';
+import { authenticateUser, requireModulePermission } from '../middleware/auth.middleware';
 
 const router = Router();
 
