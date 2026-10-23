@@ -8,7 +8,7 @@ import {
   updateCategory,
   deleteCategory
 } from '../controllers/category.controller';
-import { authenticateUser, requireAnyAdminPermission } from '../middleware/auth.middleware';
+import { authenticateUser, requireAnyAdminPermission, requireModulePermission } from '../middleware/auth.middleware';
 import { validateCategoryData, validateObjectId } from '../validators/category.validator';
 
 const router = Router();
@@ -48,21 +48,21 @@ router.get('/:id', validateObjectId, getCategoryById);
  * Create a new category
  * Requires admin authentication
  */
-router.post('/', authenticateUser, requireAnyAdminPermission(['PRODUCT_EDITOR', 'OWNER']), validateCategoryData(false), createCategory);
+router.post('/', authenticateUser, requireModulePermission('categories', 'create', ['PRODUCT_EDITOR']), validateCategoryData(false), createCategory);
 
 /**
  * PUT /api/v1/categories/:id
  * Update a category
  * Requires admin authentication
  */
-router.put('/:id', authenticateUser, requireAnyAdminPermission(['PRODUCT_EDITOR', 'OWNER']), validateObjectId, validateCategoryData(true), updateCategory);
+router.put('/:id', authenticateUser, requireModulePermission('categories', 'edit', ['PRODUCT_EDITOR']), validateObjectId, validateCategoryData(true), updateCategory);
 
 /**
  * DELETE /api/v1/categories/:id
  * Delete a category
  * Requires admin authentication
  */
-router.delete('/:id', authenticateUser, requireAnyAdminPermission(['PRODUCT_EDITOR', 'OWNER']), validateObjectId, deleteCategory);
+router.delete('/:id', authenticateUser, requireModulePermission('categories', 'delete', ['PRODUCT_EDITOR']), validateObjectId, deleteCategory);
 
 export default router;
 

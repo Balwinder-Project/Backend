@@ -9,7 +9,7 @@ import {
 import {
   authenticateUser,
   optionalAuth,
-  requireAdmin,
+  requireModulePermission,
 } from '../middleware/auth.middleware';
 import { validateRequest } from '../middleware/validateRequest';
 import {
@@ -36,7 +36,7 @@ router.post(
 router.get(
   '/admin/all',
   authenticateUser,
-  requireAdmin,
+  requireModulePermission('designRequests', 'view', ['PRODUCT_EDITOR']),
   listDesignRequestsValidator,
   validateRequest,
   listDesignRequestsAdmin
@@ -45,7 +45,7 @@ router.get(
 router.get(
   '/admin/:id',
   authenticateUser,
-  requireAdmin,
+  requireModulePermission('designRequests', 'view', ['PRODUCT_EDITOR']),
   designRequestIdValidator,
   validateRequest,
   getDesignRequestAdmin
@@ -54,7 +54,7 @@ router.get(
 router.put(
   '/admin/:id',
   authenticateUser,
-  requireAdmin,
+  requireModulePermission('designRequests', 'edit', ['PRODUCT_EDITOR']),
   updateDesignRequestValidator,
   validateRequest,
   updateDesignRequestAdmin
