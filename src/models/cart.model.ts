@@ -11,7 +11,9 @@ const cartSchema = new Schema<ICart>(
   {
     firebaseUid: { type: String, required: true, unique: true, index: true },
     items: {
-      type: Array,
+      // Mongoose's TypeScript definitions reject this mixed array without the assertion.
+      // The runtime schema remains an array of mixed cart line items.
+      type: [Schema.Types.Mixed] as any,
       default: [],
       validate: {
         validator: (items: unknown[]) => items.length <= 500,
