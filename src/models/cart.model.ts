@@ -11,7 +11,7 @@ const cartSchema = new Schema<ICart>(
   {
     firebaseUid: { type: String, required: true, unique: true, index: true },
     items: {
-      type: [Schema.Types.Mixed],
+      type: Array,
       default: [],
       validate: {
         validator: (items: unknown[]) => items.length <= 500,
