@@ -22,6 +22,7 @@ import contactRoutes from './contact.routes';
 import customerNameplateUploadRoutes from './customerNameplateUpload.routes';
 import fontRoutes from './font.routes';
 import namePlateConfigRoutes from './namePlateConfig.routes';
+import cartRoutes from './cart.routes';
 
 const router = Router();
 
@@ -31,6 +32,7 @@ const API_VERSION = '/v1';
 // Mount routes
 router.use(`${API_VERSION}/fonts`, fontRoutes);
 router.use(`${API_VERSION}/name-plate-config`, namePlateConfigRoutes);
+router.use(`${API_VERSION}/cart`, cartRoutes);
 router.use(`${API_VERSION}/users`, userRoutes);
 router.use(`${API_VERSION}/auth`, authRoutes);
 router.use(`${API_VERSION}/admin`, adminRoutes);
@@ -80,6 +82,7 @@ router.get('/', (_req, res) => {
       contact: `${API_VERSION}/contact`,
       customerNameplateUpload: `${API_VERSION}/customer-nameplate-upload`,
       fonts: `${API_VERSION}/fonts`,
+      cart: `${API_VERSION}/cart`,
     }
   });
 });
