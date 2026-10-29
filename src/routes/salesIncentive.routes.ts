@@ -1,13 +1,20 @@
-import { Router } from 'express';
+import { Request, Response, NextFunction, Router } from 'express';
 import { authenticateUser, requireAdmin } from '../middleware/auth.middleware';
 import { assignWholesalerToSalesman, createSalesman, getSummary, listLedger, listSalesmen, updateLedgerStatus, updateSalesman, getMySalesmanSummary, getMySalesmanLedger, getMySalesmanWholesalers } from '../controllers/salesIncentive.controller';
 
 const router = Router();
 
 // Salesman routes are deliberately mounted before the admin-only guard and always scope data by Firebase UID.
-router.get('/me/summary', authenticateUser, (req, res, next) => req.user?.role === 'salesman' ? next() : res.status(403).json({ success: false, message: 'Salesman access required' }), getMySalesmanSummary);
-router.get('/me/ledger', authenticateUser, (req, res, next) => req.user?.role === 'salesman' ? next() : res.status(403).json({ success: false, message: 'Salesman access required' }), getMySalesmanLedger);
-router.get('/me/wholesalers', authenticateUser, (req, res, next) => req.user?.role === 'salesman' ? next() : res.status(403).json({ success: false, message: 'Salesman access required' }), getMySalesmanWholesalers);
+const requireSalesman = (req: Request, res: Response, next: NextFunction): void => {
+  if (req.user?.role !== 'salesman') {
+    res.status(403).json({ success: false, message: 'Salesman access required' });
+    return;
+  }
+  next();
+};
+router.get('/me/summary', authenticateUser, requireSalesman, getMySalesmanSummary);
+router.get('/me/ledger', authenticateUser, requireSalesman, getMySalesmanLedger);
+router.get('/me/wholesalers', authenticateUser, requireSalesman, getMySalesmanWholesalers);
 
 router.use(authenticateUser, requireAdmin);
 router.get('/admin/summary', getSummary);
