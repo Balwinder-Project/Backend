@@ -41,10 +41,10 @@ const incentiveLedgerSchema = new Schema<IIncentiveLedgerEntry>({
   timestamps: true,
   toJSON: {
     transform: (_doc, ret) => {
-      const id = ret._id;
-      delete ret._id;
-      delete ret.__v;
-      return { id, ...ret };
+      const result = { ...ret, id: ret._id };
+      Reflect.deleteProperty(result, '_id');
+      Reflect.deleteProperty(result, '__v');
+      return result;
     },
   },
 });
