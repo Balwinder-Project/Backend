@@ -16,13 +16,8 @@ export const listSalesmen = async (req: Request, res: Response): Promise<void> =
     const search = String(req.query.search || '').trim();
     const filter: Record<string, any> = {};
     if (search) {
-      // Treat user input as literal text, not a user-supplied regular expression.
-      const safeSearch = search.replace(/[.*+?^${}()|[\]\\]/g, '\\    const filter: Record<string, any> = {};
-    if (search) filter.$or = [
-      { name: { $regex: search, $options: 'i' } },
-      { email: { $regex: search, $options: 'i' } },
-      { phone: { $regex: search, $options: 'i' } },
-    ];');
+      // Escape regular-expression metacharacters so searches are literal and predictable.
+      const safeSearch = search.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');
       filter.$or = [
         { name: { $regex: safeSearch, $options: 'i' } },
         { email: { $regex: safeSearch, $options: 'i' } },
@@ -36,7 +31,7 @@ export const listSalesmen = async (req: Request, res: Response): Promise<void> =
     const ids = salesmen.map((s: any) => s._id);
     const ledger = await IncentiveLedgerEntry.aggregate([
       { $match: { salesmanId: { $in: ids } } },
-      { $group: { _id: '$salesmanId', earned: { $sum: { $cond: [{ $in: ['$status', ['approved', 'payable', 'paid']] }, '$amount', 0] } }, payable: { $sum: { $cond: [{ $eq: ['$status', 'payable'] }, '$amount', 0] } }, paid: { $sum: { $cond: [{ $eq: ['$status', 'paid'] }, '$amount', 0] } }, orders: { $sum: { $cond: [{ $eq: ['$type', 'order'] }, 1, 0] } }, wholesalers: { $sum: { $cond: [{ $eq: ['$type', 'wholesaler_registration'] }, 1, 0] } } } },
+      { $group: { _id: '$salesmanId', earned: { $sum: { $cond: [{ $in: ['$status', ['approved', 'payable', 'paid']] }, '$amount', 0] } }, payable: { $sum: { $cond: [{ $eq: ['$status', 'payable'] }, '$amount', 0] } }, paid: { $sum: { $cond: [{ $eq: ['$status', 'paid'] }, '$amount', 0] } }, orders: { $sum: { $cond: [{ $and: [{ $eq: ['$type', 'order'] }, { $in: ['$status', ['payable', 'paid']] }] }, 1, 0] } }, wholesalers: { $sum: { $cond: [{ $and: [{ $eq: ['$type', 'wholesaler_registration'] }, { $ne: ['$status', 'reversed'] }] }, 1, 0] } } } },
     ]);
     const totals = new Map(ledger.map((x: any) => [String(x._id), x]));
     res.json({ success: true, data: salesmen.map((s: any) => {
