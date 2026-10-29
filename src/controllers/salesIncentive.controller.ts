@@ -1,5 +1,7 @@
 import { Request, Response } from 'express';
 import mongoose from 'mongoose';
+import { randomBytes } from 'crypto';
+import { auth } from '../config/firebase';
 import Salesman from '../models/salesman.model';
 import IncentiveLedgerEntry from '../models/incentiveLedger.model';
 import Retailer from '../models/retailer.model';
@@ -42,15 +44,53 @@ export const listSalesmen = async (req: Request, res: Response): Promise<void> =
 };
 
 export const createSalesman = async (req: Request, res: Response): Promise<void> => {
+  let firebaseUid: string | undefined;
+  let salesmanId: mongoose.Types.ObjectId | undefined;
   try {
     const { name, email, phone, registrationIncentiveMode, registrationIncentiveValue, orderIncentiveMode, orderIncentiveValue } = req.body;
-    if (!name || !email || !phone) { res.status(400).json({ success: false, message: 'Name, email and phone are required' }); return; }
-    const salesman = await Salesman.create({ name, email, phone, registrationIncentiveMode, registrationIncentiveValue, orderIncentiveMode, orderIncentiveValue });
-    res.status(201).json({ success: true, data: salesman });
+    if (!String(name || '').trim() || !String(email || '').trim() || !String(phone || '').trim()) {
+      res.status(400).json({ success: false, message: 'Name, email and phone are required' }); return;
+    }
+    const normalizedEmail = String(email).trim().toLowerCase();
+    if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(normalizedEmail)) {
+      res.status(400).json({ success: false, message: 'Enter a valid email address' }); return;
+    }
+    // Create a random, undisclosed password and require the salesman to set their own.
+    const temporaryPassword = randomBytes(24).toString('base64url') + 'aA1!';
+    const user = await auth.createUser({
+      email: normalizedEmail,
+      password: temporaryPassword,
+      displayName: String(name).trim(),
+      emailVerified: false,
+      disabled: false,
+    });
+    firebaseUid = user.uid;
+    await auth.setCustomUserClaims(user.uid, { role: 'salesman' });
+    const salesman = await Salesman.create({
+      name, email: normalizedEmail, phone, firebaseUid: user.uid,
+      registrationIncentiveMode, registrationIncentiveValue,
+      orderIncentiveMode, orderIncentiveValue,
+    });
+    salesmanId = salesman._id as mongoose.Types.ObjectId;
+    const passwordSetupLink = await auth.generatePasswordResetLink(normalizedEmail);
+    res.status(201).json({
+      success: true,
+      message: 'Salesman profile and login created. Share the password setup link securely with the salesman.',
+      data: { ...salesman.toJSON(), passwordSetupLink },
+    });
   } catch (error: any) {
+    // Roll back partially provisioned records so retries cannot leave orphan accounts.
+    if (salesmanId) {
+      try { await Salesman.findByIdAndDelete(salesmanId); } catch (rollbackError) { console.error('Salesman profile rollback failed', rollbackError); }
+    }
+    if (firebaseUid) {
+      try { await auth.deleteUser(firebaseUid); } catch (rollbackError) { console.error('Salesman Firebase rollback failed', rollbackError); }
+    }
     if (error?.code === 11000) { res.status(409).json({ success: false, message: 'A salesman with this email or phone already exists' }); return; }
+    if (error?.code === 'auth/email-already-exists') { res.status(409).json({ success: false, message: 'An account with this email already exists in Firebase' }); return; }
+    if (error?.code?.startsWith?.('auth/')) { res.status(400).json({ success: false, message: 'Could not provision the salesman login. Check Firebase Auth configuration and authorized domains.' }); return; }
     if (error?.name === 'ValidationError') { res.status(400).json({ success: false, message: error.message }); return; }
-    fail(res, error, 'Failed to create salesman');
+    fail(res, error, 'Failed to create salesman and login');
   }
 };
 
@@ -173,4 +213,64 @@ export const assignWholesalerToSalesman = async (req: Request, res: Response): P
     await retailer.save();
     res.json({ success: true, message: 'Wholesaler attributed and registration incentive recorded', data: { retailerId, salesmanId } });
   } catch (error) { fail(res, error, 'Failed to assign wholesaler to salesman'); }
+};
+
+
+/** Salesman-scoped dashboard endpoints. Every query is restricted to the authenticated Firebase UID. */
+const getAuthenticatedSalesman = async (uid: string) =>
+  Salesman.findOne({ firebaseUid: uid, status: 'active' });
+
+export const getMySalesmanSummary = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const salesman = await getAuthenticatedSalesman(req.user!.uid);
+    if (!salesman) { res.status(403).json({ success: false, message: 'Active salesman profile not found' }); return; }
+    const [wholesalersAttributed, eligibleOrders, grouped] = await Promise.all([
+      Retailer.countDocuments({ referredBySalesmanId: salesman._id }),
+      IncentiveLedgerEntry.countDocuments({ salesmanId: salesman._id, type: 'order', status: { $in: ['payable', 'paid'] } }),
+      IncentiveLedgerEntry.aggregate([
+        { $match: { salesmanId: salesman._id } },
+        { $group: { _id: '$status', amount: { $sum: '$amount' } } },
+      ]),
+    ]);
+    const amounts = new Map(grouped.map((item: any) => [item._id, item.amount]));
+    res.json({ success: true, data: {
+      name: salesman.name,
+      wholesalersAttributed,
+      eligibleOrders,
+      earnedAmount: (amounts.get('approved') || 0) + (amounts.get('payable') || 0) + (amounts.get('paid') || 0),
+      payableAmount: amounts.get('payable') || 0,
+      paidAmount: amounts.get('paid') || 0,
+    } });
+  } catch (error) { fail(res, error, 'Failed to load salesman dashboard'); }
+};
+
+export const getMySalesmanLedger = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const salesman = await getAuthenticatedSalesman(req.user!.uid);
+    if (!salesman) { res.status(403).json({ success: false, message: 'Active salesman profile not found' }); return; }
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 25));
+    const filter: Record<string, unknown> = { salesmanId: salesman._id };
+    if (req.query.status) filter.status = String(req.query.status);
+    const [data, total] = await Promise.all([
+      IncentiveLedgerEntry.find(filter).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean(),
+      IncentiveLedgerEntry.countDocuments(filter),
+    ]);
+    res.json({ success: true, data, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } });
+  } catch (error) { fail(res, error, 'Failed to load salesman ledger'); }
+};
+
+export const getMySalesmanWholesalers = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const salesman = await getAuthenticatedSalesman(req.user!.uid);
+    if (!salesman) { res.status(403).json({ success: false, message: 'Active salesman profile not found' }); return; }
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 25));
+    const filter = { referredBySalesmanId: salesman._id };
+    const [data, total] = await Promise.all([
+      Retailer.find(filter).select('name email phone city state createdAt').sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean(),
+      Retailer.countDocuments(filter),
+    ]);
+    res.json({ success: true, data, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } });
+  } catch (error) { fail(res, error, 'Failed to load referred wholesalers'); }
 };
