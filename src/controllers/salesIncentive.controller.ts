@@ -110,6 +110,12 @@ export const updateLedgerStatus = async (req: Request, res: Response): Promise<v
     const entry = await IncentiveLedgerEntry.findById(req.params.id);
     if (!entry) { res.status(404).json({ success: false, message: 'Ledger entry not found' }); return; }
     if (entry.status === 'paid' && status !== 'paid') { res.status(409).json({ success: false, message: 'Paid entries cannot be changed; create an audited adjustment instead' }); return; }
+    if (entry.status === 'reversed' && status !== 'reversed') { res.status(409).json({ success: false, message: 'Reversed entries are immutable; create an audited adjustment instead' }); return; }
+    // Order incentives can only become payable through the order-delivery status hook.
+    // This admin endpoint must not bypass delivery eligibility by manually approving/paying an order.
+    if (entry.type === 'order' && status === 'paid' && entry.status !== 'payable') { res.status(409).json({ success: false, message: 'Order incentives can be paid only after the order is delivered and the entry is payable' }); return; }
+    if (entry.type === 'order' && status === 'approved') { res.status(409).json({ success: false, message: 'Order incentives are approved automatically only after delivery' }); return; }
+    if (entry.type === 'order' && status === 'payable' && entry.status !== 'payable') { res.status(409).json({ success: false, message: 'Order incentives become payable only through the delivery status update' }); return; }
     entry.status = status;
     if (status === 'paid') { entry.payoutReference = String(payoutReference).trim(); entry.paidAt = new Date(); }
     if (reason) entry.description = [entry.description, 'Admin adjustment: ' + String(reason).trim()].filter(Boolean).join(' | ').slice(0, 500);
