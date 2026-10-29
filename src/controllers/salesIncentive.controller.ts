@@ -17,7 +17,7 @@ export const listSalesmen = async (req: Request, res: Response): Promise<void> =
     const filter: Record<string, any> = {};
     if (search) {
       // Escape regular-expression metacharacters so searches are literal and predictable.
-      const safeSearch = search.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');
+      const safeSearch = search.split('').map((char) => '.+?^${}()|[]\\'.includes(char) ? '\\' + char : char).join('');
       filter.$or = [
         { name: { $regex: safeSearch, $options: 'i' } },
         { email: { $regex: safeSearch, $options: 'i' } },
