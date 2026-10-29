@@ -1,0 +1,23 @@
+name: Validate pull request
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install dependencies
+        run: npm install
+      - name: TypeScript build
+        run: npm run build
+      - name: Lint salesman-scoped and admin incentive modules
+        run: npx eslint src/controllers/salesIncentive.controller.ts src/models/salesman.model.ts src/models/incentiveLedger.model.ts src/routes/salesIncentive.routes.ts

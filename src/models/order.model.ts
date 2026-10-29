@@ -55,6 +55,7 @@ export interface IOrder extends Document {
   estimatedDeliveryDate?: Date;
   trackingUrl?: string;
   notes?: string;
+  incentiveSalesmanId?: mongoose.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -142,6 +143,7 @@ const orderSchema = new Schema<IOrder>(
     estimatedDeliveryDate: { type: Date },
     trackingUrl: { type: String },
     notes: { type: String },
+    incentiveSalesmanId: { type: Schema.Types.ObjectId, ref: 'Salesman', index: true, immutable: true },
   },
   {
     timestamps: true,

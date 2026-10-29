@@ -27,6 +27,8 @@ export interface IRetailer extends Document {
   email: string;
   phone: string;
   firebaseUid: string;
+  referredBySalesmanId?: mongoose.Types.ObjectId;
+  referralIncentiveGrantedAt?: Date;
   categoryDiscounts: IRetailerCategoryDiscount[];
   productPrices: IRetailerProductPrice[];
   createdAt: Date;
@@ -84,6 +86,8 @@ const retailerSchema = new Schema<IRetailer>(
       unique: true,
       index: true
     },
+    referredBySalesmanId: { type: Schema.Types.ObjectId, ref: 'Salesman', index: true },
+    referralIncentiveGrantedAt: { type: Date },
     // SKU-specific wholesaler prices; product base price remains on the product record.
     productPrices: {
       type: [{
