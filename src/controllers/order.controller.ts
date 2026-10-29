@@ -672,11 +672,35 @@ export const shiprocketWebhook = async (req: Request, res: Response): Promise<vo
     const estimatedDate = payload?.etd ? new Date(payload.etd) : undefined;
     const courierName = payload?.courier_name || payload?.shipment_track?.[0]?.courier_name;
 
-    await OrderService.updateOrderStatus(awb, {
+    const updatedOrder = await OrderService.updateOrderStatus(awb, {
       status: mappedStatus as any,
       courierName,
       estimatedDeliveryDate: estimatedDate,
     });
+
+    // Keep the incentive ledger in sync when delivery/return arrives from Shiprocket.
+    // The admin status endpoint has the same rules; paid/reversed entries stay immutable.
+    if (updatedOrder && ['delivered', 'cancelled', 'returned'].includes(mappedStatus)) {
+      try {
+        const ledger = await IncentiveLedgerEntry.findOne({
+          idempotencyKey: `order:${String(updatedOrder._id)}`,
+        });
+        if (ledger && ledger.status !== 'paid' && ledger.status !== 'reversed') {
+          if (mappedStatus === 'delivered') {
+            ledger.status = 'payable';
+          } else {
+            ledger.status = 'reversed';
+            ledger.description = [
+              ledger.description,
+              `Automatically reversed: Shiprocket order ${mappedStatus}`,
+            ].filter(Boolean).join(' | ').slice(0, 500);
+          }
+          await ledger.save();
+        }
+      } catch (incentiveError) {
+        console.error('Shiprocket incentive ledger status update failed:', incentiveError);
+      }
+    }
 
     console.log(`Shiprocket webhook: updated order with AWB ${awb} to status ${mappedStatus}`);
   } catch (error: any) {
