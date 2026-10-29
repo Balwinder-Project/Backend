@@ -52,7 +52,7 @@ export const createSalesman = async (req: Request, res: Response): Promise<void>
       res.status(400).json({ success: false, message: 'Name, email and phone are required' }); return;
     }
     const normalizedEmail = String(email).trim().toLowerCase();
-    if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(normalizedEmail)) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
       res.status(400).json({ success: false, message: 'Enter a valid email address' }); return;
     }
     // Create a random, undisclosed password and require the salesman to set their own.
