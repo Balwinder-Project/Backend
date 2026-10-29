@@ -86,7 +86,7 @@ const retailerSchema = new Schema<IRetailer>(
       unique: true,
       index: true
     },
-    referredBySalesmanId: { type: Schema.Types.ObjectId, ref: 'Salesman', index: true, immutable: true },
+    referredBySalesmanId: { type: Schema.Types.ObjectId, ref: 'Salesman', index: true },
     referralIncentiveGrantedAt: { type: Date },
     // SKU-specific wholesaler prices; product base price remains on the product record.
     productPrices: {
