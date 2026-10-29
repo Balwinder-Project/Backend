@@ -606,7 +606,7 @@ export const updateAdminOrderStatus = async (req: Request, res: Response): Promi
     if (order) {
       try {
         const ledger = await IncentiveLedgerEntry.findOne({ idempotencyKey: `order:${String(order._id)}` });
-        if (ledger && ledger.status !== 'paid') {
+        if (ledger && ledger.status !== 'paid' && ledger.status !== 'reversed') {
           if (status === 'delivered') ledger.status = 'payable';
           else if (status === 'cancelled' || status === 'returned') {
             ledger.status = 'reversed';
