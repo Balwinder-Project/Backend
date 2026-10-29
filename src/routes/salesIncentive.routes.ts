@@ -1,8 +1,11 @@
 import { Request, Response, NextFunction, Router } from 'express';
 import { authenticateUser, requireAdmin } from '../middleware/auth.middleware';
-import { assignWholesalerToSalesman, createSalesman, getSummary, listLedger, listSalesmen, updateLedgerStatus, updateSalesman, getMySalesmanSummary, getMySalesmanLedger, getMySalesmanWholesalers } from '../controllers/salesIncentive.controller';
+import { exchangeSalesmanPhoneToken, assignWholesalerToSalesman, createSalesman, getSummary, listLedger, listSalesmen, updateLedgerStatus, updateSalesman, getMySalesmanSummary, getMySalesmanLedger, getMySalesmanWholesalers } from '../controllers/salesIncentive.controller';
 
 const router = Router();
+
+// Phone OTP must be verified by Firebase before this endpoint exchanges the verified session for the existing salesman UID.
+router.post('/auth/phone-exchange', exchangeSalesmanPhoneToken);
 
 // Salesman routes are deliberately mounted before the admin-only guard and always scope data by Firebase UID.
 const requireSalesman = (req: Request, res: Response, next: NextFunction): void => {
