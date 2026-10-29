@@ -19,5 +19,5 @@ jobs:
         run: npm install
       - name: TypeScript build
         run: npm run build
-      - name: Lint
+      - name: Lint incentive feature modules
         run: npx eslint src/controllers/salesIncentive.controller.ts src/models/salesman.model.ts src/models/incentiveLedger.model.ts src/routes/salesIncentive.routes.ts
