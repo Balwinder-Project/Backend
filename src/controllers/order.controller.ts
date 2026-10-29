@@ -11,6 +11,8 @@ import { DiscountCampaignService } from '../services/discountCampaign.service';
 import { getEffectiveUnitPrice, PricingRole, RetailerCategoryDiscount } from '../utils/pricing';
 import { supportsTransactions } from '../utils/mongoTransactions';
 import { IEmbeddedAddress, IOrder, IOrderItem } from '../models/order.model';
+import Salesman from '../models/salesman.model';
+import IncentiveLedgerEntry from '../models/incentiveLedger.model';
 
 interface BuyerPricing {
   role: PricingRole;
@@ -352,6 +354,40 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
 
     if (useTxn) await session.commitTransaction();
 
+    // Create an idempotent pending order-incentive entry for an attributed wholesaler.
+    // The entry becomes payable only after delivery; cancellation/return reverses it.
+    try {
+      const retailer = await RetailerService.getRetailerByFirebaseUid(req.user!.uid);
+      if (retailer?.referredBySalesmanId) {
+        const salesman = await Salesman.findOne({ _id: retailer.referredBySalesmanId, status: 'active' });
+        if (salesman) {
+          const incentiveAmount = salesman.orderIncentiveMode === 'percentage'
+            ? Math.round((subtotal * salesman.orderIncentiveValue / 100) * 100) / 100
+            : salesman.orderIncentiveValue;
+          await IncentiveLedgerEntry.updateOne(
+            { idempotencyKey: `order:${String(order._id)}` },
+            { $setOnInsert: {
+              salesmanId: salesman._id,
+              type: 'order',
+              status: 'pending',
+              retailerId: retailer._id,
+              orderId: order._id,
+              orderNumber: order.orderNumber,
+              eligibleOrderValue: subtotal,
+              amount: incentiveAmount,
+              idempotencyKey: `order:${String(order._id)}`,
+              description: 'Order incentive pending delivery',
+            } },
+            { upsert: true },
+          );
+          await order.updateOne({ incentiveSalesmanId: salesman._id });
+        }
+      }
+    } catch (incentiveError) {
+      // Do not fail a paid order because the incentive ledger had a temporary error.
+      console.error('Order incentive ledger creation failed:', incentiveError);
+    }
+
     // Push to Shiprocket AFTER commit — fire-and-forget, but the outcome is now
     // recorded on the order (shiprocketSyncStatus / shiprocketError) so a
     // failure is visible in admin and retryable, not silently lost.
@@ -566,6 +602,22 @@ export const updateAdminOrderStatus = async (req: Request, res: Response): Promi
   try {
     const { status } = req.body as { status: Parameters<typeof OrderService.updateOrderStatusById>[1] };
     const order = await OrderService.updateOrderStatusById(req.params.id, status);
+
+    if (order) {
+      try {
+        const ledger = await IncentiveLedgerEntry.findOne({ idempotencyKey: `order:${String(order._id)}` });
+        if (ledger && ledger.status !== 'paid') {
+          if (status === 'delivered') ledger.status = 'payable';
+          else if (status === 'cancelled' || status === 'returned') {
+            ledger.status = 'reversed';
+            ledger.description = [ledger.description, `Automatically reversed: order ${status}`].filter(Boolean).join(' | ').slice(0, 500);
+          }
+          await ledger.save();
+        }
+      } catch (incentiveError) {
+        console.error('Order incentive status update failed:', incentiveError);
+      }
+    }
 
     if (!order) {
       res.status(404).json({ success: false, message: 'Order not found' });
