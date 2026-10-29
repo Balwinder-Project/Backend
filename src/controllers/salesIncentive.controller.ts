@@ -104,18 +104,28 @@ export const updateLedgerStatus = async (req: Request, res: Response): Promise<v
   try {
     const { status, reason, payoutReference } = req.body;
     if (!mongoose.isValidObjectId(req.params.id)) { res.status(400).json({ success: false, message: 'Invalid ledger entry ID' }); return; }
-    if (!['pending', 'approved', 'payable', 'paid', 'reversed'].includes(status)) { res.status(400).json({ success: false, message: 'Invalid incentive status' }); return; }
+    if (typeof status !== 'string' || !['pending', 'approved', 'payable', 'paid', 'reversed'].includes(status)) { res.status(400).json({ success: false, message: 'Invalid incentive status' }); return; }
     if (status === 'reversed' && !String(reason || '').trim()) { res.status(400).json({ success: false, message: 'A reason is required to reverse an incentive' }); return; }
     if (status === 'paid' && !String(payoutReference || '').trim()) { res.status(400).json({ success: false, message: 'Payout reference is required before marking an incentive paid' }); return; }
     const entry = await IncentiveLedgerEntry.findById(req.params.id);
     if (!entry) { res.status(404).json({ success: false, message: 'Ledger entry not found' }); return; }
-    if (entry.status === 'paid' && status !== 'paid') { res.status(409).json({ success: false, message: 'Paid entries cannot be changed; create an audited adjustment instead' }); return; }
-    if (entry.status === 'reversed' && status !== 'reversed') { res.status(409).json({ success: false, message: 'Reversed entries are immutable; create an audited adjustment instead' }); return; }
-    // Order incentives can only become payable through the order-delivery status hook.
-    // This admin endpoint must not bypass delivery eligibility by manually approving/paying an order.
-    if (entry.type === 'order' && status === 'paid' && entry.status !== 'payable') { res.status(409).json({ success: false, message: 'Order incentives can be paid only after the order is delivered and the entry is payable' }); return; }
-    if (entry.type === 'order' && status === 'approved') { res.status(409).json({ success: false, message: 'Order incentives are approved automatically only after delivery' }); return; }
-    if (entry.type === 'order' && status === 'payable' && entry.status !== 'payable') { res.status(409).json({ success: false, message: 'Order incentives become payable only through the delivery status update' }); return; }
+    if (entry.status === status) { res.json({ success: true, data: entry, message: 'Incentive already has this status' }); return; }
+    if (entry.status === 'paid' || entry.status === 'reversed') { res.status(409).json({ success: false, message: 'Paid and reversed entries are immutable; create an audited adjustment instead' }); return; }
+
+    // Explicit transition allow-list prevents an admin action from resetting a paid
+    // entry, paying a pending order, or manually marking an undelivered order payable.
+    const allowedTransitions: Record<string, string[]> = entry.type === 'order'
+      ? { pending: ['reversed'], payable: ['paid', 'reversed'] }
+      : { pending: ['approved', 'reversed'], approved: ['paid', 'reversed'] };
+    if (!(allowedTransitions[entry.status] || []).includes(status)) {
+      res.status(409).json({
+        success: false,
+        message: entry.type === 'order'
+          ? 'Order incentives can only be paid after delivery makes them payable; pending orders may only be reversed'
+          : 'Registration incentives must be approved before payout',
+      });
+      return;
+    }
     entry.status = status;
     if (status === 'paid') { entry.payoutReference = String(payoutReference).trim(); entry.paidAt = new Date(); }
     if (reason) entry.description = [entry.description, 'Admin adjustment: ' + String(reason).trim()].filter(Boolean).join(' | ').slice(0, 500);
