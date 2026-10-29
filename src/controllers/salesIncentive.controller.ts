@@ -26,7 +26,7 @@ export const exchangeSalesmanPhoneToken = async (req: Request, res: Response): P
 
     const decoded = await auth.verifyIdToken(phoneIdToken);
     const verifiedPhone = String(decoded.phone_number || '');
-    const verifiedDigits = verifiedPhone.replace(/\\D/g, '').slice(-10);
+    const verifiedDigits = verifiedPhone.replace(/\D/g, '').slice(-10);
     if (!verifiedDigits || verifiedDigits.length !== 10) {
       res.status(401).json({ success: false, message: 'A verified Indian mobile number is required' });
       return;
