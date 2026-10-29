@@ -11,6 +11,44 @@ const fail = (res: Response, error: unknown, message: string) => {
   res.status(500).json({ success: false, message });
 };
 
+/**
+ * Exchange a verified phone-auth session for the existing salesman account.
+ * The phone token proves possession of the number; the database mapping chooses
+ * the pre-provisioned salesman UID so incentive records remain attached to it.
+ */
+export const exchangeSalesmanPhoneToken = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const phoneIdToken = String(req.body?.phoneIdToken || '').trim();
+    if (!phoneIdToken) {
+      res.status(400).json({ success: false, message: 'A verified phone sign-in token is required' });
+      return;
+    }
+
+    const decoded = await auth.verifyIdToken(phoneIdToken);
+    const verifiedPhone = String(decoded.phone_number || '');
+    const verifiedDigits = verifiedPhone.replace(/\\D/g, '').slice(-10);
+    if (!verifiedDigits || verifiedDigits.length !== 10) {
+      res.status(401).json({ success: false, message: 'A verified Indian mobile number is required' });
+      return;
+    }
+
+    const salesman = await Salesman.findOne({ phone: verifiedDigits, status: 'active' }).select('firebaseUid');
+    if (!salesman?.firebaseUid) {
+      res.status(403).json({ success: false, message: 'No active salesman account is linked to this mobile number. Contact the administrator.' });
+      return;
+    }
+
+    const customToken = await auth.createCustomToken(salesman.firebaseUid, { role: 'salesman' });
+    res.json({ success: true, customToken });
+  } catch (error: any) {
+    if (error?.code === 'auth/argument-error' || error?.code === 'auth/id-token-expired' || error?.code === 'auth/invalid-id-token') {
+      res.status(401).json({ success: false, message: 'Phone verification expired. Please request a new OTP.' });
+      return;
+    }
+    fail(res, error, 'Phone sign-in could not be completed');
+  }
+};
+
 export const listSalesmen = async (req: Request, res: Response): Promise<void> => {
   try {
     const page = Math.max(1, Number(req.query.page) || 1);
