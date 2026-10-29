@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import Salesman from '../models/salesman.model';
 import IncentiveLedgerEntry from '../models/incentiveLedger.model';
+import Retailer from '../models/retailer.model';
 
 const fail = (res: Response, error: unknown, message: string) => {
   console.error(message, error);
@@ -115,4 +116,40 @@ export const updateLedgerStatus = async (req: Request, res: Response): Promise<v
     await entry.save();
     res.json({ success: true, data: entry });
   } catch (error) { fail(res, error, 'Failed to update incentive entry'); }
+};
+
+export const assignWholesalerToSalesman = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { retailerId, salesmanId } = req.body as { retailerId: string; salesmanId: string };
+    if (!mongoose.isValidObjectId(retailerId) || !mongoose.isValidObjectId(salesmanId)) {
+      res.status(400).json({ success: false, message: 'Valid wholesaler and salesman IDs are required' }); return;
+    }
+    const [retailer, salesman] = await Promise.all([
+      Retailer.findById(retailerId),
+      Salesman.findOne({ _id: salesmanId, status: 'active' }),
+    ]);
+    if (!retailer) { res.status(404).json({ success: false, message: 'Wholesaler not found' }); return; }
+    if (!salesman) { res.status(404).json({ success: false, message: 'Active salesman not found' }); return; }
+    if (retailer.referredBySalesmanId && String(retailer.referredBySalesmanId) !== salesmanId) {
+      res.status(409).json({ success: false, message: 'Wholesaler is already attributed to another salesman' }); return;
+    }
+    retailer.referredBySalesmanId = new mongoose.Types.ObjectId(salesmanId);
+    await retailer.save();
+    await IncentiveLedgerEntry.updateOne(
+      { idempotencyKey: `registration:${String(retailer._id)}` },
+      { $setOnInsert: {
+        salesmanId: salesman._id,
+        type: 'wholesaler_registration',
+        status: 'approved',
+        retailerId: retailer._id,
+        amount: salesman.registrationIncentiveValue,
+        idempotencyKey: `registration:${String(retailer._id)}`,
+        description: 'Approved wholesaler referral incentive',
+      } },
+      { upsert: true },
+    );
+    retailer.referralIncentiveGrantedAt = new Date();
+    await retailer.save();
+    res.json({ success: true, message: 'Wholesaler attributed and registration incentive recorded', data: { retailerId, salesmanId } });
+  } catch (error) { fail(res, error, 'Failed to assign wholesaler to salesman'); }
 };
