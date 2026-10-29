@@ -15,11 +15,20 @@ export const listSalesmen = async (req: Request, res: Response): Promise<void> =
     const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 10));
     const search = String(req.query.search || '').trim();
     const filter: Record<string, any> = {};
+    if (search) {
+      // Treat user input as literal text, not a user-supplied regular expression.
+      const safeSearch = search.replace(/[.*+?^${}()|[\]\\]/g, '\\    const filter: Record<string, any> = {};
     if (search) filter.$or = [
       { name: { $regex: search, $options: 'i' } },
       { email: { $regex: search, $options: 'i' } },
       { phone: { $regex: search, $options: 'i' } },
-    ];
+    ];');
+      filter.$or = [
+        { name: { $regex: safeSearch, $options: 'i' } },
+        { email: { $regex: safeSearch, $options: 'i' } },
+        { phone: { $regex: safeSearch, $options: 'i' } },
+      ];
+    }
     const [salesmen, total] = await Promise.all([
       Salesman.find(filter).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean(),
       Salesman.countDocuments(filter),
@@ -72,7 +81,8 @@ export const getSummary = async (_req: Request, res: Response): Promise<void> =>
       Salesman.countDocuments(),
       Salesman.countDocuments({ status: 'active' }),
       IncentiveLedgerEntry.countDocuments({ type: 'wholesaler_registration', status: { $ne: 'reversed' } }),
-      IncentiveLedgerEntry.countDocuments({ type: 'order', status: { $ne: 'reversed' } }),
+      // Only delivered/payable or paid orders are eligible; pending orders are not yet eligible.
+      IncentiveLedgerEntry.countDocuments({ type: 'order', status: { $in: ['payable', 'paid'] } }),
       IncentiveLedgerEntry.aggregate([{ $group: { _id: '$status', amount: { $sum: '$amount' } } }]),
     ]);
     const amounts = new Map(grouped.map((x: any) => [x._id, x.amount]));
