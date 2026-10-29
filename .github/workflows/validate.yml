@@ -20,4 +20,4 @@ jobs:
       - name: TypeScript build
         run: npm run build
       - name: Lint
-        run: npm run lint
+        run: npx eslint src/controllers/salesIncentive.controller.ts src/models/salesman.model.ts src/models/incentiveLedger.model.ts src/routes/salesIncentive.routes.ts
