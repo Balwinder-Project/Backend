@@ -14,10 +14,20 @@ const parseBooleanQuery = (value: unknown): boolean | undefined => {
   return undefined;
 };
 
-const productCategoryId = (obj: any): string => {
-  if (obj.category && typeof obj.category === 'object') return String(obj.category.id || obj.category._id || '');
-  return String(obj.category || '');
+// Normalize Mongo ObjectIds, populated Mongoose documents, and API-shaped
+// { id / _id } objects to the same hexadecimal ID. ObjectId.id is a Buffer,
+// so reading it before toHexString() can silently break subcategory matching.
+const normalizeReferenceId = (value: any): string => {
+  if (value == null) return '';
+  if (typeof value === 'string' || typeof value === 'number') return String(value);
+  if (typeof value.toHexString === 'function') return value.toHexString();
+  if (value._id != null) return normalizeReferenceId(value._id);
+  if (typeof value.id === 'string' || typeof value.id === 'number') return String(value.id);
+  if (value.id != null && value.id !== value) return normalizeReferenceId(value.id);
+  return String(value);
 };
+
+const productCategoryId = (obj: any): string => normalizeReferenceId(obj.category);
 
 /**
  * Resolve pricing for a public (non-admin) product response.
@@ -50,18 +60,16 @@ const resolveBuyerPricing = (obj: any, retailer: any | null, campaignPercents: M
     }
     // Attach category and subcategory discount rules for the storefront.
     // Cart totals determine which quantity slab applies; checkout re-verifies it.
-    const productSubcategories = (obj.subCategories || []).map((id: any) =>
-      String(typeof id === 'object' ? (id.id || id._id || '') : id)
-    );
+    const productSubcategories = (obj.subCategories || []).map(normalizeReferenceId).filter(Boolean);
     const subcategoryDiscount = (retailer.categoryDiscounts || []).find(
       (d: any) => Boolean(d.subCategory) &&
-        String(d.category) === categoryId &&
-        productSubcategories.includes(String(typeof d.subCategory === 'object' ? (d.subCategory.id || d.subCategory._id || '') : d.subCategory))
+        normalizeReferenceId(d.category) === categoryId &&
+        productSubcategories.includes(normalizeReferenceId(d.subCategory))
     );
     if (subcategoryDiscount && Array.isArray(subcategoryDiscount.slabs) && subcategoryDiscount.slabs.length > 0) {
       obj.retailerSubcategoryDiscount = {
         category: categoryId,
-        subCategory: String(typeof subcategoryDiscount.subCategory === 'object' ? (subcategoryDiscount.subCategory.id || subcategoryDiscount.subCategory._id || '') : subcategoryDiscount.subCategory),
+        subCategory: normalizeReferenceId(subcategoryDiscount.subCategory),
         slabs: subcategoryDiscount.slabs.map((s: any) => ({
           minQuantity: s.minQuantity,
           discountPercentage: s.discountPercentage,
@@ -72,7 +80,7 @@ const resolveBuyerPricing = (obj: any, retailer: any | null, campaignPercents: M
     }
 
     const catDiscount = (retailer.categoryDiscounts || []).find(
-      (d: any) => !d.subCategory && String(d.category) === categoryId
+      (d: any) => !d.subCategory && normalizeReferenceId(d.category) === categoryId
     );
     if (catDiscount && Array.isArray(catDiscount.slabs) && catDiscount.slabs.length > 0) {
       obj.retailerCategoryDiscount = {
