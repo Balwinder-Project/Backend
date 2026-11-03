@@ -230,7 +230,20 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
       if (!product) continue;
       const qty = Math.max(1, Math.floor(Number(item.quantity) || 0));
       const key = String(product.category);
-      categoryTotals.set(key, (categoryTotals.get(key) || 0) + qty);
+      const hasDedicatedSubcategoryPricing = buyer.retailerCategoryDiscounts.some((discount) =>
+        Boolean(discount.subCategory) &&
+        String(discount.category) === key &&
+        (product.subCategories || []).some((id: any) => String(id) === String(discount.subCategory))
+      );
+
+      // The parent-category slab is exclusively for products that do not have
+      // a dedicated subcategory rule. Selected subcategory products must not
+      // inflate the remaining-category quantity (e.g. 9 Car Pillar + 3 Bullet
+      // Tank + 90 other stickers must remain 90 for the general 100+ slab).
+      if (!hasDedicatedSubcategoryPricing) {
+        categoryTotals.set(key, (categoryTotals.get(key) || 0) + qty);
+      }
+
       for (const subCategoryId of (product.subCategories || []).map((id: any) => String(id))) {
         subCategoryTotals.set(subCategoryId, (subCategoryTotals.get(subCategoryId) || 0) + qty);
       }
@@ -452,12 +465,26 @@ export const createRazorpayCheckoutOrder = async (req: Request, res: Response): 
     const campaignPercents = await DiscountCampaignService.getActiveCategoryPercents();
 
     const categoryTotals = new Map<string, number>();
+    const subCategoryTotals = new Map<string, number>();
     for (const item of items) {
       const product = products.find((p) => (p._id as any).toString() === item.productId);
       if (!product) continue;
       const qty = Math.max(1, Math.floor(Number(item.quantity) || 0));
       const key = String(product.category);
-      categoryTotals.set(key, (categoryTotals.get(key) || 0) + qty);
+      const hasDedicatedSubcategoryPricing = buyer.retailerCategoryDiscounts.some((discount) =>
+        Boolean(discount.subCategory) &&
+        String(discount.category) === key &&
+        (product.subCategories || []).some((id: any) => String(id) === String(discount.subCategory))
+      );
+
+      // Match createOrder: the parent slab counts only products in the
+      // remaining category, never products with their own subcategory rule.
+      if (!hasDedicatedSubcategoryPricing) {
+        categoryTotals.set(key, (categoryTotals.get(key) || 0) + qty);
+      }
+      for (const subCategoryId of (product.subCategories || []).map((id: any) => String(id))) {
+        subCategoryTotals.set(subCategoryId, (subCategoryTotals.get(subCategoryId) || 0) + qty);
+      }
     }
 
     let subtotal = 0;
@@ -474,6 +501,7 @@ export const createRazorpayCheckoutOrder = async (req: Request, res: Response): 
         retailerCategoryDiscounts: buyer.retailerCategoryDiscounts,
         categoryCampaignPercent: campaignPercents.get(String(product.category)) || 0,
         categoryQuantity: categoryTotals.get(String(product.category)) || quantity,
+        subCategoryQuantities: Object.fromEntries((product.subCategories || []).map((id: any) => [String(id), subCategoryTotals.get(String(id)) || 0])),
       }) * quantity;
     }
 
