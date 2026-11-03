@@ -104,7 +104,7 @@ export const getEffectiveUnitPrice = (
     const catDiscount = ctx.retailerCategoryDiscounts?.find(
       (d) => !d.subCategory && String(d.category) === String(product.category)
     );
-    const sharedThresholdReached = !catDiscount || matchingDiscountSlab(catDiscount.slabs, categoryQty) !== null;
+    const sharedThresholdReached = !catDiscount?.slabs?.length || matchingDiscountSlab(catDiscount.slabs, categoryQty) !== null;
 
     if (subCategoryDiscount && sharedThresholdReached) {
       const subCategorySlab = matchingDiscountSlab(subCategoryDiscount.slabs, categoryQty);
