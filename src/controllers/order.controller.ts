@@ -33,6 +33,8 @@ const resolvePricingContext = async (firebaseUid: string): Promise<BuyerPricing>
           slabs: (d.slabs || []).map((s: any) => ({
             minQuantity: s.minQuantity,
             discountPercentage: s.discountPercentage,
+            referencePrice: s.referencePrice,
+            wholesalerPrice: s.wholesalerPrice,
           })),
         })
       );
