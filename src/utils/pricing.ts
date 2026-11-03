@@ -106,7 +106,7 @@ export const getEffectiveUnitPrice = (
       (d) => !d.subCategory && String(d.category) === String(product.category)
     );
     const legacyThreshold = catDiscount?.slabs?.length ? Math.min(...catDiscount.slabs.map((slab) => Number(slab.minQuantity) || 1)) : 1;
-    const sharedThreshold = Number(catDiscount?.combinedMinQuantity) > 0 ? Number(catDiscount.combinedMinQuantity) : legacyThreshold;
+    const sharedThreshold = Number(catDiscount?.combinedMinQuantity) > 0 ? Number(catDiscount?.combinedMinQuantity) : legacyThreshold;
     const sharedThresholdReached = categoryQty >= sharedThreshold;
 
     if (subCategoryDiscount && sharedThresholdReached) {
