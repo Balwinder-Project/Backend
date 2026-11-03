@@ -42,6 +42,14 @@ const matchingSlabPrice = (slabs: IPricingSlab[] | undefined, quantity: number):
 };
 
 /** Highest discount % from the matching quantity slab. Null if none match. */
+const matchingDiscountSlab = (
+  slabs: Array<{ minQuantity: number; discountPercentage: number; referencePrice?: number; wholesalerPrice?: number }> | undefined,
+  quantity: number
+) => {
+  if (!Array.isArray(slabs) || slabs.length === 0) return null;
+  return [...slabs].sort((a, b) => b.minQuantity - a.minQuantity).find((s) => quantity >= s.minQuantity) ?? null;
+};
+
 const matchingDiscountPercent = (
   slabs: Array<{ minQuantity: number; discountPercentage: number; referencePrice?: number; wholesalerPrice?: number }> | undefined,
   quantity: number
@@ -94,9 +102,11 @@ export const getEffectiveUnitPrice = (
     const subCategoryQty = subCategoryDiscount
       ? (ctx.subCategoryQuantities?.[String(subCategoryDiscount.subCategory)] ?? ctx.subCategoryQuantity ?? quantity)
       : quantity;
-    const subCategoryPct = subCategoryDiscount ? matchingDiscountPercent(subCategoryDiscount.slabs, subCategoryQty) : null;
-    if (subCategoryPct !== null && subCategoryPct > 0) {
-      return round2(product.price * (1 - subCategoryPct / 100));
+    const subCategorySlab = subCategoryDiscount ? matchingDiscountSlab(subCategoryDiscount.slabs, subCategoryQty) : null;
+    if (subCategorySlab) {
+      if (subCategorySlab.wholesalerPrice != null) return round2(Number(subCategorySlab.wholesalerPrice));
+      const subCategoryPct = matchingDiscountPercent(subCategoryDiscount.slabs, subCategoryQty);
+      if (subCategoryPct !== null && subCategoryPct > 0) return round2(product.price * (1 - subCategoryPct / 100));
     }
 
     // 4. Retailer's negotiated category-wide percentage slab (off base price).
@@ -108,9 +118,11 @@ export const getEffectiveUnitPrice = (
         (d) => !d.subCategory && String(d.category) === String(product.category)
       );
       const categoryQty = ctx.categoryQuantity ?? quantity;
-      const discountPct = catDiscount ? matchingDiscountPercent(catDiscount.slabs, categoryQty) : null;
-      if (discountPct !== null && discountPct > 0) {
-        return round2(product.price * (1 - discountPct / 100));
+      const categorySlab = catDiscount ? matchingDiscountSlab(catDiscount.slabs, categoryQty) : null;
+      if (categorySlab) {
+        if (categorySlab.wholesalerPrice != null) return round2(Number(categorySlab.wholesalerPrice));
+        const discountPct = matchingDiscountPercent(catDiscount.slabs, categoryQty);
+        if (discountPct !== null && discountPct > 0) return round2(product.price * (1 - discountPct / 100));
       }
     }
 
