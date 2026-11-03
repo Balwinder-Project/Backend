@@ -100,14 +100,18 @@ export const getEffectiveUnitPrice = (
     }
 
     // 4. Retailer's negotiated category-wide percentage slab (off base price).
-    //    Matched against the whole-cart category quantity, not the line qty.
-    const catDiscount = ctx.retailerCategoryDiscounts?.find(
-      (d) => !d.subCategory && String(d.category) === String(product.category)
-    );
-    const categoryQty = ctx.categoryQuantity ?? quantity;
-    const discountPct = catDiscount ? matchingDiscountPercent(catDiscount.slabs, categoryQty) : null;
-    if (discountPct !== null && discountPct > 0) {
-      return round2(product.price * (1 - discountPct / 100));
+    //    This parent rule is ONLY for products without a dedicated subcategory
+    //    rule. Even when a selected subcategory's own minimum quantity is not
+    //    met, it must never fall through into the remaining-category slab.
+    if (!subCategoryDiscount) {
+      const catDiscount = ctx.retailerCategoryDiscounts?.find(
+        (d) => !d.subCategory && String(d.category) === String(product.category)
+      );
+      const categoryQty = ctx.categoryQuantity ?? quantity;
+      const discountPct = catDiscount ? matchingDiscountPercent(catDiscount.slabs, categoryQty) : null;
+      if (discountPct !== null && discountPct > 0) {
+        return round2(product.price * (1 - discountPct / 100));
+      }
     }
 
     // 5. Global wholesale slabs.
