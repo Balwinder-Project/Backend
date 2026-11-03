@@ -105,7 +105,7 @@ export const getEffectiveUnitPrice = (
     const subCategorySlab = subCategoryDiscount ? matchingDiscountSlab(subCategoryDiscount.slabs, subCategoryQty) : null;
     if (subCategorySlab) {
       if (subCategorySlab.wholesalerPrice != null) return round2(Number(subCategorySlab.wholesalerPrice));
-      const subCategoryPct = matchingDiscountPercent(subCategoryDiscount.slabs, subCategoryQty);
+      const subCategoryPct = matchingDiscountPercent(subCategoryDiscount?.slabs, subCategoryQty);
       if (subCategoryPct !== null && subCategoryPct > 0) return round2(product.price * (1 - subCategoryPct / 100));
     }
 
@@ -121,7 +121,7 @@ export const getEffectiveUnitPrice = (
       const categorySlab = catDiscount ? matchingDiscountSlab(catDiscount.slabs, categoryQty) : null;
       if (categorySlab) {
         if (categorySlab.wholesalerPrice != null) return round2(Number(categorySlab.wholesalerPrice));
-        const discountPct = matchingDiscountPercent(catDiscount.slabs, categoryQty);
+        const discountPct = matchingDiscountPercent(catDiscount?.slabs, categoryQty);
         if (discountPct !== null && discountPct > 0) return round2(product.price * (1 - discountPct / 100));
       }
     }
@@ -166,5 +166,9 @@ export const retailerCategorySlabsToPrices = (
 ): IPricingSlab[] =>
   (slabs || []).map((s) => ({
     minQuantity: s.minQuantity,
-    price: round2(basePrice * (1 - (s.discountPercentage || 0) / 100)),
+    // The configured negotiated price is authoritative. Only fall back to
+    // the percentage for older records that do not contain wholesalerPrice.
+    price: s.wholesalerPrice != null
+      ? round2(Number(s.wholesalerPrice))
+      : round2(basePrice * (1 - (s.discountPercentage || 0) / 100)),
   }));
