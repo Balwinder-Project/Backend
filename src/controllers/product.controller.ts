@@ -65,6 +65,8 @@ const resolveBuyerPricing = (obj: any, retailer: any | null, campaignPercents: M
         slabs: subcategoryDiscount.slabs.map((s: any) => ({
           minQuantity: s.minQuantity,
           discountPercentage: s.discountPercentage,
+          referencePrice: s.referencePrice,
+          wholesalerPrice: s.wholesalerPrice,
         })),
       };
     }
@@ -78,6 +80,8 @@ const resolveBuyerPricing = (obj: any, retailer: any | null, campaignPercents: M
         slabs: catDiscount.slabs.map((s: any) => ({
           minQuantity: s.minQuantity,
           discountPercentage: s.discountPercentage,
+          referencePrice: s.referencePrice,
+          wholesalerPrice: s.wholesalerPrice,
         })),
       };
     }
