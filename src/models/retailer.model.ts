@@ -14,6 +14,8 @@ export interface IRetailerCategoryDiscount {
   category: mongoose.Types.ObjectId;
   /** When set, this rule applies only to products in this subcategory. */
   subCategory?: mongoose.Types.ObjectId;
+  /** Shared MOQ across all products in this parent category. */
+  combinedMinQuantity?: number;
   slabs: IRetailerCategorySlab[];
 }
 
@@ -102,6 +104,7 @@ const retailerSchema = new Schema<IRetailer>(
         {
           category: { type: Schema.Types.ObjectId, ref: 'Category', required: true },
           subCategory: { type: Schema.Types.ObjectId, ref: 'SubCategory' },
+          combinedMinQuantity: { type: Number, min: [1, 'Combined minimum quantity must be at least 1'] },
           slabs: {
             type: [
               {

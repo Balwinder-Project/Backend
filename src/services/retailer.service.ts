@@ -7,6 +7,7 @@ type RetailerProductPriceInput = { productId: string; slabs: Array<{ minQuantity
 type RetailerCategoryDiscountInput = {
   category: string;
   subCategory?: string;
+  combinedMinQuantity?: number;
   slabs: Array<{ minQuantity: number; discountPercentage: number; referencePrice?: number; wholesalerPrice?: number }>;
 };
 

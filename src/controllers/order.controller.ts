@@ -30,6 +30,7 @@ const resolvePricingContext = async (firebaseUid: string): Promise<BuyerPricing>
         (d: any) => ({
           category: String(d.category),
           ...(d.subCategory && { subCategory: String(d.subCategory) }),
+          ...(!d.subCategory && d.combinedMinQuantity != null ? { combinedMinQuantity: Number(d.combinedMinQuantity) } : {}),
           slabs: (d.slabs || []).map((s: any) => ({
             minQuantity: s.minQuantity,
             discountPercentage: s.discountPercentage,

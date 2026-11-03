@@ -7,6 +7,7 @@ export interface RetailerCategoryDiscount {
   category: string;
   /** Present when this discount is limited to a specific subcategory. */
   subCategory?: string;
+  combinedMinQuantity?: number;
   slabs: Array<{ minQuantity: number; discountPercentage: number; referencePrice?: number; wholesalerPrice?: number }>;
 }
 
@@ -104,7 +105,9 @@ export const getEffectiveUnitPrice = (
     const catDiscount = ctx.retailerCategoryDiscounts?.find(
       (d) => !d.subCategory && String(d.category) === String(product.category)
     );
-    const sharedThresholdReached = !catDiscount?.slabs?.length || matchingDiscountSlab(catDiscount.slabs, categoryQty) !== null;
+    const legacyThreshold = catDiscount?.slabs?.length ? Math.min(...catDiscount.slabs.map((slab) => Number(slab.minQuantity) || 1)) : 1;
+    const sharedThreshold = Number(catDiscount?.combinedMinQuantity) > 0 ? Number(catDiscount?.combinedMinQuantity) : legacyThreshold;
+    const sharedThresholdReached = categoryQty >= sharedThreshold;
 
     if (subCategoryDiscount && sharedThresholdReached) {
       const subCategorySlab = matchingDiscountSlab(subCategoryDiscount.slabs, categoryQty);
@@ -117,7 +120,7 @@ export const getEffectiveUnitPrice = (
 
     // 4. The parent-category price applies only to products without a dedicated
     //    subcategory rule. Its quantity threshold is the combined category total.
-    if (!subCategoryDiscount) {
+    if (!subCategoryDiscount && sharedThresholdReached) {
       const categorySlab = catDiscount ? matchingDiscountSlab(catDiscount.slabs, categoryQty) : null;
       if (categorySlab) {
         if (categorySlab.wholesalerPrice != null) return round2(Number(categorySlab.wholesalerPrice));
