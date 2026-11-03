@@ -82,7 +82,7 @@ const resolveBuyerPricing = (obj: any, retailer: any | null, campaignPercents: M
     const catDiscount = (retailer.categoryDiscounts || []).find(
       (d: any) => !d.subCategory && normalizeReferenceId(d.category) === categoryId
     );
-    if (catDiscount && Array.isArray(catDiscount.slabs) && catDiscount.slabs.length > 0) {
+    if (catDiscount && ((Array.isArray(catDiscount.slabs) && catDiscount.slabs.length > 0) || Number(catDiscount.combinedMinQuantity) > 0)) {
       obj.retailerCategoryDiscount = {
         category: categoryId,
         combinedMinQuantity: catDiscount.combinedMinQuantity,
