@@ -85,6 +85,7 @@ const resolveBuyerPricing = (obj: any, retailer: any | null, campaignPercents: M
     if (catDiscount && Array.isArray(catDiscount.slabs) && catDiscount.slabs.length > 0) {
       obj.retailerCategoryDiscount = {
         category: categoryId,
+        combinedMinQuantity: catDiscount.combinedMinQuantity,
         slabs: catDiscount.slabs.map((s: any) => ({
           minQuantity: s.minQuantity,
           discountPercentage: s.discountPercentage,
