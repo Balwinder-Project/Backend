@@ -93,31 +93,31 @@ export const getEffectiveUnitPrice = (
       if (specialPrice !== null) return specialPrice;
     }
 
-    // 3. Subcategory-specific percentage discount takes priority over the
-    //    broader category rule. Match whole-cart quantity for that subcategory.
+    // 3. Use the whole parent-category quantity for every sticker price rule.
+    //    The parent "remaining subcategories" slab defines the shared threshold;
+    //    once reached, selected subcategories use their own negotiated prices.
+    const categoryQty = ctx.categoryQuantity ?? quantity;
     const productSubcategories = (product.subCategories || []).map((id: any) => String(id));
     const subCategoryDiscount = ctx.retailerCategoryDiscounts?.find(
       (d) => Boolean(d.subCategory) && String(d.category) === String(product.category) && productSubcategories.includes(String(d.subCategory))
     );
-    const subCategoryQty = subCategoryDiscount
-      ? (ctx.subCategoryQuantities?.[String(subCategoryDiscount.subCategory)] ?? ctx.subCategoryQuantity ?? quantity)
-      : quantity;
-    const subCategorySlab = subCategoryDiscount ? matchingDiscountSlab(subCategoryDiscount.slabs, subCategoryQty) : null;
-    if (subCategorySlab) {
-      if (subCategorySlab.wholesalerPrice != null) return round2(Number(subCategorySlab.wholesalerPrice));
-      const subCategoryPct = matchingDiscountPercent(subCategoryDiscount?.slabs, subCategoryQty);
-      if (subCategoryPct !== null && subCategoryPct > 0) return round2(product.price * (1 - subCategoryPct / 100));
+    const catDiscount = ctx.retailerCategoryDiscounts?.find(
+      (d) => !d.subCategory && String(d.category) === String(product.category)
+    );
+    const sharedThresholdReached = !catDiscount || matchingDiscountSlab(catDiscount.slabs, categoryQty) !== null;
+
+    if (subCategoryDiscount && sharedThresholdReached) {
+      const subCategorySlab = matchingDiscountSlab(subCategoryDiscount.slabs, categoryQty);
+      if (subCategorySlab) {
+        if (subCategorySlab.wholesalerPrice != null) return round2(Number(subCategorySlab.wholesalerPrice));
+        const subCategoryPct = matchingDiscountPercent(subCategoryDiscount.slabs, categoryQty);
+        if (subCategoryPct !== null && subCategoryPct > 0) return round2(product.price * (1 - subCategoryPct / 100));
+      }
     }
 
-    // 4. Retailer's negotiated category-wide percentage slab (off base price).
-    //    This parent rule is ONLY for products without a dedicated subcategory
-    //    rule. Even when a selected subcategory's own minimum quantity is not
-    //    met, it must never fall through into the remaining-category slab.
+    // 4. The parent-category price applies only to products without a dedicated
+    //    subcategory rule. Its quantity threshold is the combined category total.
     if (!subCategoryDiscount) {
-      const catDiscount = ctx.retailerCategoryDiscounts?.find(
-        (d) => !d.subCategory && String(d.category) === String(product.category)
-      );
-      const categoryQty = ctx.categoryQuantity ?? quantity;
       const categorySlab = catDiscount ? matchingDiscountSlab(catDiscount.slabs, categoryQty) : null;
       if (categorySlab) {
         if (categorySlab.wholesalerPrice != null) return round2(Number(categorySlab.wholesalerPrice));
