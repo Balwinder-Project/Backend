@@ -54,6 +54,13 @@ export class RazorpayService {
      * Verify a Razorpay payment signature (HMAC-SHA256 of `orderId|paymentId`
      * with the key secret). Returns true only if the payment is authentic.
      */
+    static verifyWebhookSignature(rawBody: Buffer, signature: string): boolean {
+        const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
+        if (!secret || !signature) return false;
+        const expected = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
+        try { return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature)); } catch { return false; }
+    }
+
     static verifyPaymentSignature(orderId: string, paymentId: string, signature: string): boolean {
         if (!orderId || !paymentId || !signature) return false;
         const expected = crypto

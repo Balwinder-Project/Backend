@@ -10,6 +10,7 @@ import {
   updateAdminOrderStatus,
   retryShiprocketSync,
   shiprocketWebhook,
+  razorpayWebhook,
 } from '../controllers/order.controller';
 import { authenticateUser, requireModulePermission } from '../middleware/auth.middleware';
 import { validateRequest } from '../middleware/validateRequest';
@@ -19,6 +20,7 @@ const router = Router();
 
 // Webhook MUST come first — no auth, AWB-based verification
 router.post('/shiprocket/webhook', shiprocketWebhook);
+router.post('/razorpay/webhook', razorpayWebhook);
 
 // Authenticated routes
 router.post('/shipping-rates', authenticateUser, shippingRatesValidator, validateRequest, getShippingRates);

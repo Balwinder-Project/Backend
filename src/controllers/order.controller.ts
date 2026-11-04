@@ -10,7 +10,7 @@ import { RetailerService } from '../services/retailer.service';
 import { DiscountCampaignService } from '../services/discountCampaign.service';
 import { getEffectiveUnitPrice, PricingRole, RetailerCategoryDiscount } from '../utils/pricing';
 import { supportsTransactions } from '../utils/mongoTransactions';
-import { IEmbeddedAddress, IOrder, IOrderItem } from '../models/order.model';
+import Order, { IEmbeddedAddress, IOrder, IOrderItem, OrderStatus } from '../models/order.model';
 import Salesman from '../models/salesman.model';
 import IncentiveLedgerEntry from '../models/incentiveLedger.model';
 
@@ -216,6 +216,43 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
       razorpayPaymentId?: string;
       razorpaySignature?: string;
     };
+
+    // Razorpay checkout is persisted before payment. Finalize that exact order.
+    if (paymentMethod === 'razorpay') {
+      const pending = await Order.findOne({ razorpayOrderId, userId });
+      if (!pending) {
+        if (useTxn) await session.abortTransaction();
+        res.status(404).json({ success: false, message: 'Pending checkout not found. Please contact support with your payment ID.' });
+        return;
+      }
+      if (pending.status === OrderStatus.CONFIRMED && pending.razorpayPaymentId === razorpayPaymentId) {
+        if (useTxn) await session.abortTransaction();
+        res.status(200).json({ success: true, message: 'Order already confirmed', data: pending });
+        return;
+      }
+      const validSignature = RazorpayService.verifyPaymentSignature(razorpayOrderId || '', razorpayPaymentId || '', razorpaySignature || '');
+      const payment = validSignature ? await RazorpayService.getPayment(razorpayPaymentId || '') : null;
+      if (!validSignature || payment?.status !== 'captured' || payment?.order_id !== razorpayOrderId ||
+          Number(payment?.amount || 0) !== Math.round(pending.total * 100)) {
+        if (useTxn) await session.abortTransaction();
+        res.status(400).json({ success: false, message: 'Payment verification failed or amount mismatch' });
+        return;
+      }
+      const confirmed = await Order.findOneAndUpdate(
+        { _id: pending._id, status: OrderStatus.PENDING, razorpayOrderId },
+        { $set: { status: OrderStatus.CONFIRMED, razorpayPaymentId } },
+        { new: true }
+      );
+      const finalOrder = confirmed || await Order.findOne({ razorpayOrderId, razorpayPaymentId });
+      if (!finalOrder) {
+        res.status(409).json({ success: false, message: 'Payment received; order confirmation is processing. Please refresh your orders.' });
+        return;
+      }
+      if (confirmed) pushOrderToShiprocket(confirmed).catch(() => {});
+      if (useTxn && session.inTransaction()) await session.abortTransaction();
+      res.status(200).json({ success: true, message: 'Order placed successfully', data: finalOrder });
+      return;
+    }
 
     // Enrich items with product name, sku, weight — and compute the price
     // server-side (never trust the client-sent price).
@@ -442,12 +479,15 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
 export const createRazorpayCheckoutOrder = async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = await resolveUserId(req.user!.uid);
-    const { items, shippingCharge = 0 } = req.body as {
-      items: Array<{ productId: string; quantity: number }>;
+    const { items, shippingCharge = 0, shippingAddress, billingAddress, notes } = req.body as {
+      items: Array<{ productId: string; quantity: number; variant?: Record<string, any> }>;
       shippingCharge?: number;
+      shippingAddress: IEmbeddedAddress;
+      billingAddress: IEmbeddedAddress;
+      notes?: string;
     };
 
-    if (!Array.isArray(items) || items.length === 0) {
+    if (!Array.isArray(items) || items.length === 0 || !shippingAddress || !billingAddress) {
       res.status(400).json({ success: false, message: 'No items to pay for' });
       return;
     }
@@ -485,6 +525,7 @@ export const createRazorpayCheckoutOrder = async (req: Request, res: Response): 
         role: buyer.role,
         retailerId: buyer.retailerId,
         retailerCategoryDiscounts: buyer.retailerCategoryDiscounts,
+        retailerProductPrices: buyer.retailerProductPrices,
         categoryCampaignPercent: campaignPercents.get(String(product.category)) || 0,
         categoryQuantity: categoryTotals.get(String(product.category)) || quantity,
         subCategoryQuantities: Object.fromEntries((product.subCategories || []).map((id: any) => [String(id), subCategoryTotals.get(String(id)) || 0])),
@@ -498,8 +539,27 @@ export const createRazorpayCheckoutOrder = async (req: Request, res: Response): 
     }
 
     const amountInPaise = Math.round(total * 100);
-    const receipt = `ord_${userId.slice(-8)}_${Math.floor(Date.now() / 1000)}`;
+    const receipt = `ord_${userId.slice(-8)}_${Date.now()}`.slice(0, 40);
     const order = await RazorpayService.createOrder(amountInPaise, 'INR', receipt, { userId });
+    const orderItems: IOrderItem[] = items.map((item) => {
+      const product = products.find((p) => (p._id as any).toString() === item.productId)!;
+      const quantity = Math.max(1, Math.floor(Number(item.quantity) || 0));
+      const price = getEffectiveUnitPrice(product, quantity, {
+        role: buyer.role,
+        retailerId: buyer.retailerId,
+        retailerCategoryDiscounts: buyer.retailerCategoryDiscounts,
+        retailerProductPrices: buyer.retailerProductPrices,
+        categoryCampaignPercent: campaignPercents.get(String(product.category)) || 0,
+        categoryQuantity: categoryTotals.get(String(product.category)) || quantity,
+        subCategoryQuantities: Object.fromEntries((product.subCategories || []).map((id: any) => [String(id), subCategoryTotals.get(String(id)) || 0])),
+      });
+      return { productId: new mongoose.Types.ObjectId(item.productId), name: product.name, sku: product.sku, quantity, price, variant: item.variant, weight: (product.weight ?? 0.5) * quantity };
+    });
+    await Order.create({
+      userId: new mongoose.Types.ObjectId(userId), items: orderItems, shippingAddress, billingAddress,
+      subtotal, shippingCharge: Math.max(0, Number(shippingCharge) || 0), total,
+      notes, paymentMethod: 'razorpay', razorpayOrderId: order.id, status: OrderStatus.PENDING,
+    });
 
     res.status(200).json({
       success: true,
@@ -517,6 +577,42 @@ export const createRazorpayCheckoutOrder = async (req: Request, res: Response): 
       message: 'Failed to create payment order',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
+  }
+};
+
+/** Recover captured payments even if the customer closes the browser. */
+export const razorpayWebhook = async (req: Request, res: Response): Promise<void> => {
+  const rawBody: Buffer | undefined = (req as any).rawBody;
+  const signature = req.header('x-razorpay-signature') || '';
+  if (!rawBody || !RazorpayService.verifyWebhookSignature(rawBody, signature)) {
+    res.status(400).json({ success: false, message: 'Invalid Razorpay webhook signature' });
+    return;
+  }
+  res.status(200).json({ success: true });
+  try {
+    const event = req.body?.event;
+    if (event !== 'payment.captured' && event !== 'order.paid') return;
+    const payment = req.body?.payload?.payment?.entity;
+    const orderId = payment?.order_id || req.body?.payload?.order?.entity?.id;
+    const paymentId = payment?.id;
+    if (!orderId || !paymentId || (payment?.status && payment.status !== 'captured')) return;
+    const pending = await Order.findOne({ razorpayOrderId: orderId });
+    if (!pending) {
+      console.error(`[razorpay webhook] captured payment ${paymentId} has no matching pending order ${orderId}`);
+      return;
+    }
+    if (Number(payment?.amount || 0) !== Math.round(pending.total * 100) || (payment?.currency && payment.currency !== 'INR')) {
+      console.error(`[razorpay webhook] amount/currency mismatch for order ${orderId}`);
+      return;
+    }
+    const confirmed = await Order.findOneAndUpdate(
+      { _id: pending._id, status: OrderStatus.PENDING },
+      { $set: { status: OrderStatus.CONFIRMED, razorpayPaymentId: paymentId } },
+      { new: true }
+    );
+    if (confirmed) pushOrderToShiprocket(confirmed).catch(() => {});
+  } catch (error: any) {
+    console.error('[razorpay webhook] processing failed:', error?.message || error);
   }
 };
 

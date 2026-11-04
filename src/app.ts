@@ -34,7 +34,7 @@ app.use(cors(corsOptions)); // Enable CORS
 
 app.use(morgan('dev')); // Request logging
 // Raise default JSON/urlencoded limit slightly; design-request images use multipart (multer)
-app.use(express.json({ limit: '2mb' }));
+app.use(express.json({ limit: '2mb', verify: (req: Request, _res, buf) => { (req as any).rawBody = Buffer.from(buf); } }));
 app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 
 // Routes

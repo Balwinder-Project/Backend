@@ -12,6 +12,7 @@ export interface CreateOrderData {
   paymentMethod?: 'wallet' | 'razorpay';
   razorpayOrderId?: string;
   razorpayPaymentId?: string;
+  status?: OrderStatus;
 }
 
 interface PaginatedOrders {
@@ -40,7 +41,7 @@ export class OrderService {
           paymentMethod: data.paymentMethod || 'wallet',
           razorpayOrderId: data.razorpayOrderId,
           razorpayPaymentId: data.razorpayPaymentId,
-          status: OrderStatus.CONFIRMED,
+          status: data.status || OrderStatus.CONFIRMED,
           notes: data.notes,
         },
       ],
