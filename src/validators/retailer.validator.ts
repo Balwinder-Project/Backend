@@ -6,7 +6,7 @@ import { INDIAN_STATES } from '../constants/indian-states';
  */
 export const validateRetailerData = (isUpdate: boolean = false) => {
   return (req: Request, res: Response, next: NextFunction): void => {
-    const { name, city, state, pincode, email, phone, password } = req.body;
+    const { name, city, state, pincode, email, phone, password, sheetQuantity } = req.body;
     const errors: string[] = [];
 
     // Validate name
@@ -61,6 +61,11 @@ export const validateRetailerData = (isUpdate: boolean = false) => {
       } else if (phone && !/^[6-9][0-9]{9}$/.test(phone)) {
         errors.push('Phone must be a valid 10-digit Indian mobile number');
       }
+    }
+
+    if (sheetQuantity !== undefined && sheetQuantity !== null && sheetQuantity !== '') {
+      const quantity = Number(sheetQuantity);
+      if (!Number.isInteger(quantity) || quantity < 25) errors.push('Minimum wholesale order is 25 whole sheets');
     }
 
     // Validate password (required only for creation)
