@@ -249,6 +249,7 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
         return;
       }
       if (confirmed) pushOrderToShiprocket(confirmed).catch(() => {});
+      if (useTxn && session.inTransaction()) await session.abortTransaction();
       res.status(200).json({ success: true, message: 'Order placed successfully', data: finalOrder });
       return;
     }
@@ -524,6 +525,7 @@ export const createRazorpayCheckoutOrder = async (req: Request, res: Response): 
         role: buyer.role,
         retailerId: buyer.retailerId,
         retailerCategoryDiscounts: buyer.retailerCategoryDiscounts,
+        retailerProductPrices: buyer.retailerProductPrices,
         categoryCampaignPercent: campaignPercents.get(String(product.category)) || 0,
         categoryQuantity: categoryTotals.get(String(product.category)) || quantity,
         subCategoryQuantities: Object.fromEntries((product.subCategories || []).map((id: any) => [String(id), subCategoryTotals.get(String(id)) || 0])),
