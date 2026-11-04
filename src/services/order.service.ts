@@ -41,7 +41,7 @@ export class OrderService {
           paymentMethod: data.paymentMethod || 'wallet',
           razorpayOrderId: data.razorpayOrderId,
           razorpayPaymentId: data.razorpayPaymentId,
-          status: OrderStatus.CONFIRMED,
+          status: data.status || OrderStatus.CONFIRMED,
           notes: data.notes,
         },
       ],
