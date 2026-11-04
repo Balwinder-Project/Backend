@@ -24,6 +24,7 @@ import fontRoutes from './font.routes';
 import namePlateConfigRoutes from './namePlateConfig.routes';
 import cartRoutes from './cart.routes';
 import salesIncentiveRoutes from './salesIncentive.routes';
+import wholesaleEnquiryRoutes from './wholesaleEnquiry.routes';
 
 const router = Router();
 
@@ -35,6 +36,7 @@ router.use(`${API_VERSION}/fonts`, fontRoutes);
 router.use(`${API_VERSION}/name-plate-config`, namePlateConfigRoutes);
 router.use(`${API_VERSION}/cart`, cartRoutes);
 router.use(`${API_VERSION}/sales-incentives`, salesIncentiveRoutes);
+router.use(`${API_VERSION}/wholesale-enquiries`, wholesaleEnquiryRoutes);
 router.use(`${API_VERSION}/users`, userRoutes);
 router.use(`${API_VERSION}/auth`, authRoutes);
 router.use(`${API_VERSION}/admin`, adminRoutes);
