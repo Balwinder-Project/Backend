@@ -12,6 +12,7 @@ export interface CreateOrderData {
   paymentMethod?: 'wallet' | 'razorpay';
   razorpayOrderId?: string;
   razorpayPaymentId?: string;
+  status?: OrderStatus;
 }
 
 interface PaginatedOrders {
