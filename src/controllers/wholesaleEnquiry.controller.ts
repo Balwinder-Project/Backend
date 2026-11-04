@@ -14,6 +14,8 @@ export const submitWholesaleEnquiry = async (req: Request, res: Response): Promi
     const email = clean(req.body.email).toLowerCase();
     const phone = clean(req.body.phone).replace(/\D/g, '').slice(-10);
     const state = clean(req.body.state);
+    const district = clean(req.body.district);
+    const pincode = clean(req.body.pincode).replace(/\\D/g, '');
     const address = clean(req.body.address);
     const requirement = clean(req.body.requirement);
 
@@ -23,6 +25,8 @@ export const submitWholesaleEnquiry = async (req: Request, res: Response): Promi
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.push('A valid email address is required');
     if (!/^[6-9]\d{9}$/.test(phone)) errors.push('Enter a valid 10 digit Indian mobile number');
     if (!state) errors.push('State is required');
+    if (!district) errors.push('District is required');
+    if (!/^[1-9][0-9]{5}$/.test(pincode)) errors.push('Enter a valid 6 digit PIN code');
     if (address.length < 8) errors.push('Complete address is required');
     if (errors.length) {
       res.status(400).json({ success: false, message: 'Please check the enquiry details', errors });
@@ -46,7 +50,7 @@ export const submitWholesaleEnquiry = async (req: Request, res: Response): Promi
     }
 
     const enquiry = await WholesaleEnquiry.create({
-      businessName, contactPerson, email, phone, state, address, requirement,
+      businessName, contactPerson, email, phone, state, district, pincode, address, requirement,
       visitingCardUrl, visitingCardName,
     });
     res.status(201).json({
