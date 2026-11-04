@@ -23,7 +23,12 @@ export interface IRetailerProductPrice { productId: mongoose.Types.ObjectId; sla
 
 export interface IRetailer extends Document {
   name: string;
+  contactPerson?: string;
   city: string;
+  district?: string;
+  sheetQuantity?: number;
+  address?: string;
+  requirement?: string;
   state: string;
   pincode: string;
   email: string;
@@ -46,6 +51,7 @@ const retailerSchema = new Schema<IRetailer>(
       minlength: [2, 'Name must be at least 2 characters long'],
       maxlength: [100, 'Name cannot exceed 100 characters']
     },
+    contactPerson: { type: String, trim: true, maxlength: [100, 'Contact person cannot exceed 100 characters'] },
     city: {
       type: String,
       required: [true, 'City is required'],
@@ -53,6 +59,10 @@ const retailerSchema = new Schema<IRetailer>(
       minlength: [2, 'City must be at least 2 characters long'],
       maxlength: [100, 'City cannot exceed 100 characters']
     },
+    district: { type: String, trim: true, maxlength: [100, 'District cannot exceed 100 characters'] },
+    sheetQuantity: { type: Number, min: [25, 'Minimum wholesale order is 25 sheets'], validate: { validator: (value: number) => value == null || Number.isInteger(value), message: 'Sheet quantity must be a whole number' } },
+    address: { type: String, trim: true, maxlength: [500, 'Address cannot exceed 500 characters'] },
+    requirement: { type: String, trim: true, maxlength: [2000, 'Requirement cannot exceed 2000 characters'] },
     state: {
       type: String,
       required: [true, 'State is required'],
