@@ -15,7 +15,7 @@ export const submitWholesaleEnquiry = async (req: Request, res: Response): Promi
     const phone = clean(req.body.phone).replace(/\D/g, '').slice(-10);
     const state = clean(req.body.state);
     const district = clean(req.body.district);
-    const pincode = clean(req.body.pincode).replace(/\\D/g, '');
+    const pincode = clean(req.body.pincode).replace(/\D/g, '');
     const address = clean(req.body.address);
     const requirement = clean(req.body.requirement);
 
