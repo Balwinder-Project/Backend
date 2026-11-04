@@ -13,7 +13,12 @@ type RetailerCategoryDiscountInput = {
 
 interface CreateRetailerData {
   name: string;
+  contactPerson?: string;
   city: string;
+  district?: string;
+  sheetQuantity?: number;
+  address?: string;
+  requirement?: string;
   state: string;
   pincode: string;
   email: string;
@@ -25,7 +30,12 @@ interface CreateRetailerData {
 
 interface UpdateRetailerData {
   name?: string;
+  contactPerson?: string;
   city?: string;
+  district?: string;
+  sheetQuantity?: number;
+  address?: string;
+  requirement?: string;
   state?: string;
   pincode?: string;
   email?: string;
@@ -61,7 +71,12 @@ export class RetailerService {
       // Create retailer in MongoDB
       const retailer = await Retailer.create({
         name: data.name,
+        contactPerson: data.contactPerson,
         city: data.city,
+        district: data.district,
+        sheetQuantity: data.sheetQuantity,
+        address: data.address,
+        requirement: data.requirement,
         state: data.state,
         pincode: data.pincode,
         email: data.email,
@@ -182,7 +197,12 @@ export class RetailerService {
       // Update MongoDB document
       const updateData: any = {};
       if (data.name) updateData.name = data.name;
+      if (data.contactPerson !== undefined) updateData.contactPerson = data.contactPerson;
       if (data.city) updateData.city = data.city;
+      if (data.district !== undefined) updateData.district = data.district;
+      if (data.sheetQuantity !== undefined) updateData.sheetQuantity = data.sheetQuantity;
+      if (data.address !== undefined) updateData.address = data.address;
+      if (data.requirement !== undefined) updateData.requirement = data.requirement;
       if (data.state) updateData.state = data.state;
       if (data.pincode) updateData.pincode = data.pincode;
       if (data.email) updateData.email = data.email;
