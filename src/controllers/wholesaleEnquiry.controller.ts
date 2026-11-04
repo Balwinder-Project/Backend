@@ -16,6 +16,7 @@ export const submitWholesaleEnquiry = async (req: Request, res: Response): Promi
     const state = clean(req.body.state);
     const district = clean(req.body.district);
     const pincode = clean(req.body.pincode).replace(/\D/g, '');
+    const sheetQuantity = Number(clean(req.body.sheetQuantity));
     const address = clean(req.body.address);
     const requirement = clean(req.body.requirement);
 
@@ -28,6 +29,7 @@ export const submitWholesaleEnquiry = async (req: Request, res: Response): Promi
     if (!district) errors.push('District is required');
     if (!/^[1-9][0-9]{5}$/.test(pincode)) errors.push('Enter a valid 6 digit PIN code');
     if (address.length < 8) errors.push('Complete address is required');
+    if (!Number.isInteger(sheetQuantity) || sheetQuantity < 25) errors.push('Minimum wholesale order is 25 sticker sheets');
     if (errors.length) {
       res.status(400).json({ success: false, message: 'Please check the enquiry details', errors });
       return;
@@ -50,7 +52,7 @@ export const submitWholesaleEnquiry = async (req: Request, res: Response): Promi
     }
 
     const enquiry = await WholesaleEnquiry.create({
-      businessName, contactPerson, email, phone, state, district, pincode, address, requirement,
+      businessName, contactPerson, email, phone, state, district, pincode, sheetQuantity, address, requirement,
       visitingCardUrl, visitingCardName,
     });
     res.status(201).json({
