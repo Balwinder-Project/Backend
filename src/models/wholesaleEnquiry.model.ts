@@ -10,6 +10,7 @@ export interface IWholesaleEnquiry extends Document {
   state: string;
   district: string;
   pincode: string;
+  sheetQuantity: number;
   address: string;
   requirement: string;
   visitingCardUrl?: string;
@@ -28,6 +29,7 @@ const wholesaleEnquirySchema = new Schema<IWholesaleEnquiry>({
   state: { type: String, required: true, trim: true },
   district: { type: String, required: true, trim: true },
   pincode: { type: String, required: true, trim: true, match: /^[1-9][0-9]{5}$/ },
+  sheetQuantity: { type: Number, required: true, min: 25, validate: { validator: Number.isInteger, message: 'Sheet quantity must be a whole number' } },
   address: { type: String, required: true, trim: true, maxlength: 1000 },
   requirement: { type: String, default: '', trim: true, maxlength: 3000 },
   visitingCardUrl: { type: String },
