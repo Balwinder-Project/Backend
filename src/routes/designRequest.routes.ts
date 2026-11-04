@@ -8,7 +8,6 @@ import {
 } from '../controllers/designRequest.controller';
 import {
   authenticateUser,
-  optionalAuth,
   requireModulePermission,
 } from '../middleware/auth.middleware';
 import { validateRequest } from '../middleware/validateRequest';
@@ -21,11 +20,11 @@ import {
 
 const router = Router();
 
-// Public submit (optional auth attaches firebaseUid when logged in)
-// Order: optionalAuth → multer → validators → handler
+// Customer submit requires a verified Firebase login.
+// Order: authenticateUser → multer → validators → handler
 router.post(
   '/',
-  optionalAuth,
+  authenticateUser,
   designRequestUpload,
   createDesignRequestValidator,
   validateRequest,
