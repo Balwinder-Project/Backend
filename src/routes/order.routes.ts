@@ -20,6 +20,7 @@ const router = Router();
 
 // Webhook MUST come first — no auth, AWB-based verification
 router.post('/shiprocket/webhook', shiprocketWebhook);
+router.post('/razorpay/webhook', razorpayWebhook);
 
 // Authenticated routes
 router.post('/shipping-rates', authenticateUser, shippingRatesValidator, validateRequest, getShippingRates);
