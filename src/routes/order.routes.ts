@@ -10,6 +10,7 @@ import {
   updateAdminOrderStatus,
   retryShiprocketSync,
   shiprocketWebhook,
+  razorpayWebhook,
 } from '../controllers/order.controller';
 import { authenticateUser, requireModulePermission } from '../middleware/auth.middleware';
 import { validateRequest } from '../middleware/validateRequest';
