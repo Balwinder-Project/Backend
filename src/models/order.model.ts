@@ -127,7 +127,7 @@ const orderSchema = new Schema<IOrder>(
       type: Schema.Types.ObjectId,
       ref: 'WalletTransaction',
     },
-    razorpayOrderId: { type: String },
+    razorpayOrderId: { type: String, unique: true, sparse: true },
     razorpayPaymentId: { type: String },
     status: {
       type: String,
