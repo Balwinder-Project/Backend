@@ -56,10 +56,15 @@ export const designRequestUpload = (req: Request, res: Response, next: () => voi
 
 /**
  * POST /api/v1/design-requests
- * Public (optional auth) — submit a design brief with reference images.
+ * Authenticated customer — submit a design brief with reference images.
  */
 export const createDesignRequest = async (req: Request, res: Response): Promise<void> => {
   try {
+    if (!req.user?.uid || !req.user?.email) {
+      res.status(401).json({ success: false, message: 'Please log in with a valid customer account to submit a design request' });
+      return;
+    }
+
     const files = (req.files as Express.Multer.File[]) || [];
     if (files.length === 0) {
       res.status(400).json({
@@ -75,9 +80,9 @@ export const createDesignRequest = async (req: Request, res: Response): Promise<
     );
 
     const request = await DesignRequestService.create({
-      name: String(req.body.name || '').trim(),
+      name: String(req.user.name || req.user.email.split('@')[0] || 'Customer').trim().substring(0, 80),
       subject: String(req.body.subject || '').trim(),
-      email: String(req.body.email || '').trim().toLowerCase(),
+      email: String(req.user.email).trim().toLowerCase(),
       phone: String(req.body.phone || '').replace(/[^\d+]/g, ''),
       requirements: String(req.body.requirements || '').trim(),
       images: imageUrls,

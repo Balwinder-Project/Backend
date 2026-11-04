@@ -1,15 +1,6 @@
 import { body, param, query } from 'express-validator';
 
 export const createDesignRequestValidator = [
-  body('name')
-    .notEmpty()
-    .withMessage('Name is required')
-    .isString()
-    .withMessage('Name must be a string')
-    .trim()
-    .isLength({ min: 2, max: 80 })
-    .withMessage('Name must be 2–80 characters'),
-
   body('subject')
     .notEmpty()
     .withMessage('Subject is required')
@@ -18,15 +9,6 @@ export const createDesignRequestValidator = [
     .trim()
     .isLength({ min: 1, max: 120 })
     .withMessage('Subject cannot exceed 120 characters'),
-
-  body('email')
-    .notEmpty()
-    .withMessage('Email is required')
-    .isEmail()
-    .withMessage('Please provide a valid email address')
-    .normalizeEmail()
-    .isLength({ max: 100 })
-    .withMessage('Email cannot exceed 100 characters'),
 
   body('phone')
     .notEmpty()
