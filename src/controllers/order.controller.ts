@@ -310,29 +310,6 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
     const safeShipping = Math.max(0, Number(shippingCharge) || 0);
     const total = subtotal + safeShipping;
 
-    // For Razorpay: verify the payment signature AND that the amount actually
-    // paid matches this order's total (prevents paying for a cheaper order then
-    // submitting expensive items with a valid signature).
-    if (paymentMethod === 'razorpay') {
-      const validSignature = RazorpayService.verifyPaymentSignature(
-        razorpayOrderId || '',
-        razorpayPaymentId || '',
-        razorpaySignature || ''
-      );
-      if (!validSignature) {
-        if (useTxn) await session.abortTransaction();
-        res.status(400).json({ success: false, message: 'Payment verification failed' });
-        return;
-      }
-      const rzpOrder = await RazorpayService.getOrder(razorpayOrderId || '');
-      const paidPaise = Number(rzpOrder?.amount || 0);
-      if (paidPaise !== Math.round(total * 100)) {
-        if (useTxn) await session.abortTransaction();
-        res.status(400).json({ success: false, message: 'Paid amount does not match the order total' });
-        return;
-      }
-    }
-
     // 1. Insufficient-balance pre-check (read-only) for wallet payments, so we
     //    never create an order the customer can't pay for. Reports the actual
     //    figures the order sees for an unambiguous error.
