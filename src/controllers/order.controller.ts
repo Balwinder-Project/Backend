@@ -269,6 +269,11 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
 
     // Razorpay checkout is persisted before payment. Finalize that exact order.
     if (paymentMethod === 'razorpay') {
+      if (!razorpayOrderId || !razorpayPaymentId || !razorpaySignature) {
+        if (useTxn) await session.abortTransaction();
+        res.status(400).json({ success: false, message: 'Razorpay payment details are incomplete.' });
+        return;
+      }
       const pending = await Order.findOne({ razorpayOrderId, userId });
       if (!pending) {
         if (useTxn) await session.abortTransaction();
