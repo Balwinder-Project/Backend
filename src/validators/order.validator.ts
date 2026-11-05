@@ -45,10 +45,6 @@ export const createOrderValidator = [
 
   ...addressFields('shippingAddress'),
   ...addressFields('billingAddress'),
-
-  body('shippingCharge')
-    .notEmpty().withMessage('Shipping charge is required')
-    .isFloat({ min: 0 }).withMessage('Shipping charge must be non-negative'),
 ];
 
 export const updateOrderStatusValidator = [
