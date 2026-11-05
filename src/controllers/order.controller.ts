@@ -103,7 +103,7 @@ async function getCheapestShippingQuote(
  */
 export async function pushOrderToShiprocket(order: IOrder, forceRetry = false): Promise<void> {
   const orderId = (order._id as any).toString();
-  if (order.paymentMethod === 'razorpay' && (order.paymentStatus === 'pending' || order.status === OrderStatus.PENDING)) {
+  if (order.paymentMethod === 'razorpay' && ((Boolean(order.paymentStatus) && order.paymentStatus !== 'paid') || order.status === OrderStatus.PENDING)) {
     console.warn(`[shiprocket] refusing to sync unpaid Razorpay order ${order.orderNumber}`);
     return;
   }
@@ -964,7 +964,7 @@ export const retryShiprocketSync = async (req: Request, res: Response): Promise<
       return;
     }
     if (order.status === OrderStatus.PENDING || order.status === OrderStatus.CANCELLED || order.status === OrderStatus.RETURNED ||
-        (order.paymentMethod === 'razorpay' && order.paymentStatus !== 'paid')) {
+        (order.paymentMethod === 'razorpay' && Boolean(order.paymentStatus) && order.paymentStatus !== 'paid')) {
       res.status(400).json({ success: false, message: 'Only confirmed, paid orders can be synced to Shiprocket', data: order });
       return;
     }
