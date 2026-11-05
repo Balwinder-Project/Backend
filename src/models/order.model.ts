@@ -45,6 +45,9 @@ export interface IOrder extends Document {
   walletTransactionId?: mongoose.Types.ObjectId;
   razorpayOrderId?: string;
   razorpayPaymentId?: string;
+  checkoutSessionId?: string;
+  checkoutFingerprint?: string;
+  paymentStatus?: 'pending' | 'paid' | 'failed' | 'refunded';
   status: OrderStatus;
   shiprocketOrderId?: string;
   shiprocketShipmentId?: string;
@@ -132,6 +135,9 @@ const orderSchema = new Schema<IOrder>(
     },
     razorpayOrderId: { type: String, unique: true, sparse: true },
     razorpayPaymentId: { type: String },
+    checkoutSessionId: { type: String, unique: true, sparse: true },
+    checkoutFingerprint: { type: String },
+    paymentStatus: { type: String, enum: ['pending', 'paid', 'failed', 'refunded'], default: 'paid', index: true },
     status: {
       type: String,
       enum: Object.values(OrderStatus),
