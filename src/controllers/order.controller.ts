@@ -223,7 +223,8 @@ export const getShippingRates = async (req: Request, res: Response): Promise<voi
     });
   } catch (error: any) {
     console.error('Get shipping rates error:', error);
-    res.status(500).json({ success: false, message: error.message || 'Failed to fetch shipping rates' });
+    const unavailable = String(error.message || '').includes('No Shiprocket courier');
+    res.status(unavailable ? 422 : 500).json({ success: false, message: error.message || 'Failed to fetch shipping rates' });
   }
 };
 
@@ -488,6 +489,10 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
       return;
     }
 
+    if (String(error.message || '').includes('Shiprocket courier') || String(error.message || '').includes('pickup postcode')) {
+      res.status(422).json({ success: false, message: error.message });
+      return;
+    }
     res.status(500).json({ success: false, message: error.message || 'Failed to place order' });
   } finally {
     session.endSession();
@@ -597,9 +602,11 @@ export const createRazorpayCheckoutOrder = async (req: Request, res: Response): 
     });
   } catch (error: any) {
     console.error('Error creating Razorpay checkout order:', error);
-    res.status(500).json({
+    const unavailable = String(error.message || '').includes('No Shiprocket courier') ||
+      String(error.message || '').includes('pickup postcode');
+    res.status(unavailable ? 422 : 500).json({
       success: false,
-      message: 'Failed to create payment order',
+      message: unavailable ? error.message : 'Failed to create payment order',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
