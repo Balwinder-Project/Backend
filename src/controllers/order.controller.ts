@@ -103,7 +103,7 @@ async function getCheapestShippingQuote(
  */
 export async function pushOrderToShiprocket(order: IOrder, forceRetry = false): Promise<void> {
   const orderId = (order._id as any).toString();
-  if (order.paymentMethod === 'razorpay' && ((Boolean(order.paymentStatus) && order.paymentStatus !== 'paid') || order.status === OrderStatus.PENDING)) {
+  if (order.paymentMethod === 'razorpay' && order.paymentStatus !== 'paid') {
     console.warn(`[shiprocket] refusing to sync unpaid Razorpay order ${order.orderNumber}`);
     return;
   }
@@ -615,7 +615,7 @@ export const createRazorpayCheckoutOrder = async (req: Request, res: Response): 
         res.status(409).json({ success: false, message: 'Checkout details changed. Please restart checkout.' });
         return;
       }
-      if (existing.paymentStatus === 'paid' || existing.status === OrderStatus.CONFIRMED) {
+      if (existing.paymentStatus === 'paid') {
         res.status(200).json({
           success: true,
           data: { alreadyPaid: true, orderId: String(existing._id), orderNumber: existing.orderNumber },
@@ -835,7 +835,7 @@ export const updateAdminOrderStatus = async (req: Request, res: Response): Promi
       return;
     }
     const isUnpaidRazorpay = currentOrder.paymentMethod === 'razorpay' &&
-      (currentOrder.paymentStatus ? currentOrder.paymentStatus !== 'paid' : currentOrder.status === OrderStatus.PENDING);
+      currentOrder.paymentStatus !== 'paid';
     if (isUnpaidRazorpay && status !== OrderStatus.CANCELLED) {
       res.status(409).json({ success: false, message: 'Cannot process an unpaid Razorpay order. Verify payment first or cancel the order.' });
       return;
