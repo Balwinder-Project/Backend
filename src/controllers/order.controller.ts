@@ -834,9 +834,9 @@ export const updateAdminOrderStatus = async (req: Request, res: Response): Promi
       res.status(404).json({ success: false, message: 'Order not found' });
       return;
     }
-    if (currentOrder.paymentMethod === 'razorpay' && currentOrder.paymentStatus !== 'paid' &&
-        ((Boolean(currentOrder.paymentStatus) && currentOrder.paymentStatus !== 'paid') || currentOrder.status === OrderStatus.PENDING) &&
-        status !== OrderStatus.CANCELLED) {
+    const isUnpaidRazorpay = currentOrder.paymentMethod === 'razorpay' &&
+      (currentOrder.paymentStatus ? currentOrder.paymentStatus !== 'paid' : currentOrder.status === OrderStatus.PENDING);
+    if (isUnpaidRazorpay && status !== OrderStatus.CANCELLED) {
       res.status(409).json({ success: false, message: 'Cannot process an unpaid Razorpay order. Verify payment first or cancel the order.' });
       return;
     }
