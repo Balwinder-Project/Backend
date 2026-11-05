@@ -71,6 +71,55 @@ export class OrderService {
   }
 
   /**
+   * Atomically claim a Shiprocket sync attempt so concurrent webhook, request,
+   * and retry-worker calls cannot create duplicate Shiprocket orders.
+   */
+  static async claimShiprocketSync(orderId: string, force: boolean = false): Promise<boolean> {
+    const now = new Date();
+    const staleProcessing = new Date(now.getTime() - 10 * 60 * 1000);
+    const query: any = {
+      _id: orderId,
+      shiprocketOrderId: { $exists: false },
+      $and: [
+        {
+          $or: [
+            { shiprocketSyncStatus: { $in: ['pending', 'failed'] } },
+            { shiprocketSyncStatus: { $exists: false } },
+            { shiprocketSyncStatus: 'processing', updatedAt: { $lte: staleProcessing } },
+          ],
+        },
+      ],
+    };
+
+    if (!force) {
+      query.$and.push({
+        $or: [
+          { shiprocketSyncAttempts: { $lt: 5 } },
+          { shiprocketSyncAttempts: { $exists: false } },
+        ],
+      });
+      query.$and.push({
+        $or: [
+          { shiprocketNextRetryAt: { $exists: false } },
+          { shiprocketNextRetryAt: null },
+          { shiprocketNextRetryAt: { $lte: now } },
+        ],
+      });
+    }
+
+    const claimed = await Order.findOneAndUpdate(
+      query,
+      {
+        $set: { shiprocketSyncStatus: 'processing', shiprocketLastAttemptAt: now },
+        $inc: { shiprocketSyncAttempts: 1 },
+        $unset: { shiprocketError: 1, shiprocketNextRetryAt: 1 },
+      },
+      { new: true }
+    );
+    return Boolean(claimed);
+  }
+
+  /**
    * Record the outcome of pushing an order to Shiprocket so failures are
    * visible (and retryable) instead of silently swallowed.
    */
@@ -85,12 +134,21 @@ export class OrderService {
         shiprocketSyncStatus: 'success',
         shiprocketOrderId: result.shiprocketOrderId,
         shiprocketShipmentId: result.shiprocketShipmentId,
-        $unset: { shiprocketError: 1 },
+        $unset: { shiprocketError: 1, shiprocketNextRetryAt: 1 },
       });
     } else {
+      const order = await Order.findById(orderId).select('shiprocketSyncAttempts').lean();
+      const attempts = Number(order?.shiprocketSyncAttempts || 1);
+      const retryDelaysMinutes = [1, 5, 15, 60, 180];
+      const retryAt = attempts < 5
+        ? new Date(Date.now() + retryDelaysMinutes[Math.max(0, attempts - 1)] * 60 * 1000)
+        : null;
       await Order.findByIdAndUpdate(orderId, {
-        shiprocketSyncStatus: 'failed',
-        shiprocketError: result.error?.slice(0, 1000),
+        $set: {
+          shiprocketSyncStatus: 'failed',
+          shiprocketError: result.error?.slice(0, 1000),
+          shiprocketNextRetryAt: retryAt,
+        },
       });
     }
   }
