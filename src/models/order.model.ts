@@ -48,7 +48,10 @@ export interface IOrder extends Document {
   status: OrderStatus;
   shiprocketOrderId?: string;
   shiprocketShipmentId?: string;
-  shiprocketSyncStatus?: 'pending' | 'success' | 'failed';
+  shiprocketSyncStatus?: 'pending' | 'processing' | 'success' | 'failed';
+  shiprocketSyncAttempts?: number;
+  shiprocketLastAttemptAt?: Date;
+  shiprocketNextRetryAt?: Date;
   shiprocketError?: string;
   awbCode?: string;
   courierName?: string;
@@ -136,7 +139,10 @@ const orderSchema = new Schema<IOrder>(
     },
     shiprocketOrderId: { type: String },
     shiprocketShipmentId: { type: String },
-    shiprocketSyncStatus: { type: String, enum: ['pending', 'success', 'failed'] },
+    shiprocketSyncStatus: { type: String, enum: ['pending', 'processing', 'success', 'failed'], default: 'pending' },
+    shiprocketSyncAttempts: { type: Number, default: 0 },
+    shiprocketLastAttemptAt: { type: Date },
+    shiprocketNextRetryAt: { type: Date },
     shiprocketError: { type: String },
     awbCode: { type: String, index: true },
     courierName: { type: String },
