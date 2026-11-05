@@ -61,6 +61,7 @@ async function getCheapestShippingQuote(
   products: any[],
   deliveryPincode: string
 ): Promise<{ shippingCharge: number; totalWeight: number; selectedRate: any; rates: any[] }> {
+  if (!PICKUP_POSTCODE) throw new Error('Shiprocket pickup postcode is not configured on the server');
   const pincode = String(deliveryPincode || '').replace(/\D/g, '');
   if (!/^\d{6}$/.test(pincode)) {
     throw new Error('A valid 6-digit delivery pincode is required to calculate shipping');
@@ -858,12 +859,18 @@ export const retryShiprocketSync = async (req: Request, res: Response): Promise<
       res.status(400).json({ success: false, message: 'Order is already synced to Shiprocket', data: order });
       return;
     }
+    if (order.status === OrderStatus.PENDING || order.status === OrderStatus.CANCELLED || order.status === OrderStatus.RETURNED) {
+      res.status(400).json({ success: false, message: 'Only confirmed, paid orders can be synced to Shiprocket', data: order });
+      return;
+    }
 
     await pushOrderToShiprocket(order, true);
     const updated = await OrderService.getOrderById(id);
 
     if (updated?.shiprocketSyncStatus === 'success') {
       res.status(200).json({ success: true, message: 'Order synced to Shiprocket', data: updated });
+    } else if (updated?.shiprocketSyncStatus === 'processing') {
+      res.status(202).json({ success: true, message: 'Shiprocket sync is already in progress', data: updated });
     } else {
       res.status(502).json({
         success: false,
