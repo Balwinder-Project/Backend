@@ -156,7 +156,7 @@ export const approveWholesaleEnquiry = async (req: Request, res: Response): Prom
       state: clean(req.body.state) || enquiry.state,
       pincode: clean(req.body.pincode) || enquiry.pincode,
       email: clean(req.body.email) || enquiry.email,
-      phone: clean(req.body.phone).replace(/\\D/g, '').slice(-10) || enquiry.phone,
+      phone: clean(req.body.phone).replace(/\D/g, '').slice(-10) || enquiry.phone,
       password,
       categoryDiscounts: Array.isArray(req.body.categoryDiscounts) ? req.body.categoryDiscounts : [],
       productPrices: Array.isArray(req.body.productPrices) ? req.body.productPrices : [],
