@@ -43,6 +43,7 @@ export interface ShiprocketOrderPayload {
   order_items: ShiprocketOrderItem[];
   payment_method: 'Prepaid';
   sub_total: number;
+  shipping_charges?: number;
   length: number;
   breadth: number;
   height: number;
