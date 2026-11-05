@@ -1,6 +1,6 @@
 import mongoose, { Document, Schema } from 'mongoose';
 
-export type WholesaleEnquiryStatus = 'pending' | 'contacted' | 'closed';
+export type WholesaleEnquiryStatus = 'pending' | 'contacted' | 'closed' | 'approved' | 'rejected';
 
 export interface IWholesaleEnquiry extends Document {
   businessName: string;
@@ -17,6 +17,7 @@ export interface IWholesaleEnquiry extends Document {
   visitingCardName?: string;
   status: WholesaleEnquiryStatus;
   internalNotes: string;
+  retailerId?: mongoose.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -34,7 +35,8 @@ const wholesaleEnquirySchema = new Schema<IWholesaleEnquiry>({
   requirement: { type: String, default: '', trim: true, maxlength: 3000 },
   visitingCardUrl: { type: String },
   visitingCardName: { type: String },
-  status: { type: String, enum: ['pending', 'contacted', 'closed'], default: 'pending', index: true },
+  status: { type: String, enum: ['pending', 'contacted', 'closed', 'approved', 'rejected'], default: 'pending', index: true },
+  retailerId: { type: Schema.Types.ObjectId, ref: 'Retailer', index: true },
   internalNotes: { type: String, default: '', maxlength: 5000 },
 }, { timestamps: true });
 
