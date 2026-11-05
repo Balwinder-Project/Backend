@@ -14,6 +14,7 @@ export const submitWholesaleEnquiry = async (req: Request, res: Response): Promi
     const contactPerson = clean(req.body.contactPerson);
     const email = clean(req.body.email).toLowerCase();
     const phone = clean(req.body.phone).replace(/\D/g, '').slice(-10);
+    const gstNumber = clean(req.body.gstNumber).toUpperCase();
     const state = clean(req.body.state);
     const district = clean(req.body.district);
     const pincode = clean(req.body.pincode).replace(/\D/g, '');
@@ -26,6 +27,7 @@ export const submitWholesaleEnquiry = async (req: Request, res: Response): Promi
     if (contactPerson.length < 2) errors.push('Contact person is required');
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.push('A valid email address is required');
     if (!/^[6-9]\d{9}$/.test(phone)) errors.push('Enter a valid 10 digit Indian mobile number');
+    if (gstNumber && !/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(gstNumber)) errors.push('Enter a valid 15-character GSTIN or leave it blank');
     if (!state) errors.push('State is required');
     if (!district) errors.push('District is required');
     if (!/^[1-9][0-9]{5}$/.test(pincode)) errors.push('Enter a valid 6 digit PIN code');
@@ -53,7 +55,7 @@ export const submitWholesaleEnquiry = async (req: Request, res: Response): Promi
     }
 
     const enquiry = await WholesaleEnquiry.create({
-      businessName, contactPerson, email, phone, state, district, pincode, sheetQuantity, address, requirement,
+      businessName, contactPerson, email, phone, gstNumber: gstNumber || undefined, state, district, pincode, sheetQuantity, address, requirement,
       visitingCardUrl, visitingCardName,
     });
     res.status(201).json({
@@ -79,6 +81,7 @@ export const getWholesaleEnquiries = async (req: Request, res: Response): Promis
       { businessName: { $regex: search, $options: 'i' } },
       { contactPerson: { $regex: search, $options: 'i' } },
       { phone: { $regex: search, $options: 'i' } },
+      { gstNumber: { $regex: search, $options: 'i' } },
       { email: { $regex: search, $options: 'i' } },
       { state: { $regex: search, $options: 'i' } },
     ];

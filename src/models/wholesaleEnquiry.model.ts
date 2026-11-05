@@ -7,6 +7,7 @@ export interface IWholesaleEnquiry extends Document {
   contactPerson: string;
   email: string;
   phone: string;
+  gstNumber?: string;
   state: string;
   district: string;
   pincode: string;
@@ -27,6 +28,7 @@ const wholesaleEnquirySchema = new Schema<IWholesaleEnquiry>({
   contactPerson: { type: String, required: true, trim: true, maxlength: 100 },
   email: { type: String, required: true, trim: true, lowercase: true, maxlength: 160 },
   phone: { type: String, required: true, trim: true, maxlength: 20 },
+  gstNumber: { type: String, trim: true, uppercase: true, maxlength: 15, match: /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/ },
   state: { type: String, required: true, trim: true },
   district: { type: String, required: true, trim: true },
   pincode: { type: String, required: true, trim: true, match: /^[1-9][0-9]{5}$/ },
