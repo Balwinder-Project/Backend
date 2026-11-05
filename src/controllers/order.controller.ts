@@ -61,8 +61,8 @@ async function getCheapestShippingQuote(
   products: any[],
   deliveryPincode: string
 ): Promise<{ shippingCharge: number; totalWeight: number; selectedRate: any; rates: any[] }> {
-  const pincode = String(deliveryPincode || '').replace(/\\D/g, '');
-  if (!/^\\d{6}$/.test(pincode)) {
+  const pincode = String(deliveryPincode || '').replace(/\D/g, '');
+  if (!/^\d{6}$/.test(pincode)) {
     throw new Error('A valid 6-digit delivery pincode is required to calculate shipping');
   }
 
