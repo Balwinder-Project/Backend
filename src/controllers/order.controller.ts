@@ -54,12 +54,52 @@ const resolvePricingContext = async (firebaseUid: string): Promise<BuyerPricing>
 const PICKUP_POSTCODE = process.env.SHIPROCKET_PICKUP_POSTCODE || '';
 const PICKUP_LOCATION = process.env.SHIPROCKET_PICKUP_LOCATION_NAME || 'Primary';
 
+type ShippingItemInput = { productId: string; quantity: number };
+
+async function getCheapestShippingQuote(
+  items: ShippingItemInput[],
+  products: any[],
+  deliveryPincode: string
+): Promise<{ shippingCharge: number; totalWeight: number; selectedRate: any; rates: any[] }> {
+  const pincode = String(deliveryPincode || '').replace(/\\D/g, '');
+  if (!/^\\d{6}$/.test(pincode)) {
+    throw new Error('A valid 6-digit delivery pincode is required to calculate shipping');
+  }
+
+  let totalWeight = 0;
+  for (const item of items) {
+    const product = products.find((p) => (p._id as any).toString() === item.productId);
+    if (!product) throw new Error('PRODUCT_NOT_FOUND');
+    const quantity = Math.max(1, Math.floor(Number(item.quantity) || 0));
+    totalWeight += Math.max(0.01, Number(product.weight) || 0.5) * quantity;
+  }
+
+  // Shiprocket's serviceability API expects chargeable shipment weight in kg.
+  const chargeableWeight = Math.max(0.5, totalWeight);
+  const rates = await ShiprocketService.getShippingRates(PICKUP_POSTCODE, pincode, chargeableWeight, 0);
+  const availableRates = rates
+    .filter((rate) => Number.isFinite(Number(rate.rate)) && Number(rate.rate) >= 0)
+    .sort((a, b) => Number(a.rate) - Number(b.rate));
+
+  if (!availableRates.length) {
+    throw new Error(`No Shiprocket courier is currently available for delivery pincode ${pincode}`);
+  }
+
+  const selectedRate = availableRates[0];
+  return {
+    shippingCharge: Math.round(Number(selectedRate.rate) * 100) / 100,
+    totalWeight: chargeableWeight,
+    selectedRate,
+    rates: availableRates,
+  };
+}
+
 /**
  * Push a persisted order to Shiprocket and record the outcome on the order so
  * failures are visible (order.shiprocketSyncStatus / shiprocketError) and can
  * be retried, instead of being silently swallowed. Never throws.
  */
-export async function pushOrderToShiprocket(order: IOrder): Promise<void> {
+export async function pushOrderToShiprocket(order: IOrder, forceRetry = false): Promise<void> {
   const orderId = (order._id as any).toString();
   try {
     const productIds = order.items.map((i) => i.productId);
@@ -84,6 +124,9 @@ export async function pushOrderToShiprocket(order: IOrder): Promise<void> {
     };
     const billName = splitName(bill.name);
     const shipName = splitName(ship.name);
+
+    const claimed = await OrderService.claimShiprocketSync(orderId, forceRetry);
+    if (!claimed) return;
 
     const sr = await ShiprocketService.createOrder({
       order_id: order.orderNumber,
@@ -118,6 +161,7 @@ export async function pushOrderToShiprocket(order: IOrder): Promise<void> {
       })),
       payment_method: 'Prepaid',
       sub_total: order.subtotal,
+      shipping_charges: order.shippingCharge,
       length: products[0]?.length ?? 10,
       breadth: products[0]?.breadth ?? 10,
       height: products[0]?.height ?? 5,
@@ -158,23 +202,23 @@ export const getShippingRates = async (req: Request, res: Response): Promise<voi
       return;
     }
 
-    // Calculate total weight from products
+    if (!Array.isArray(items) || items.length === 0) {
+      res.status(400).json({ success: false, message: 'At least one order item is required' });
+      return;
+    }
     const productIds = items.map((i) => i.productId);
     const products = await Product.find({ _id: { $in: productIds } });
-
-    let totalWeight = 0;
-    for (const item of items) {
-      const product = products.find((p) => (p._id as any).toString() === item.productId);
-      const weight = product?.weight ?? 0.5;
-      totalWeight += weight * item.quantity;
-    }
-
-    const rates = await ShiprocketService.getShippingRates(PICKUP_POSTCODE, deliveryPincode, totalWeight);
+    const quote = await getCheapestShippingQuote(items, products, deliveryPincode);
 
     res.status(200).json({
       success: true,
       message: 'Shipping rates fetched successfully',
-      data: { rates, totalWeight },
+      data: {
+        rates: quote.rates,
+        totalWeight: quote.totalWeight,
+        selectedRate: quote.selectedRate,
+        shippingCharge: quote.shippingCharge,
+      },
     });
   } catch (error: any) {
     console.error('Get shipping rates error:', error);
@@ -199,7 +243,6 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
       items,
       shippingAddress,
       billingAddress,
-      shippingCharge,
       notes,
       paymentMethod = 'wallet',
       razorpayOrderId,
@@ -209,7 +252,7 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
       items: Array<{ productId: string; quantity: number; price: number; variant?: Record<string, any> }>;
       shippingAddress: IEmbeddedAddress;
       billingAddress: IEmbeddedAddress;
-      shippingCharge: number;
+      shippingCharge?: number;
       notes?: string;
       paymentMethod?: 'wallet' | 'razorpay';
       razorpayOrderId?: string;
@@ -307,7 +350,9 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
     });
 
     const subtotal = orderItems.reduce((sum, i) => sum + i.price * i.quantity, 0);
-    const safeShipping = Math.max(0, Number(shippingCharge) || 0);
+    // Always calculate shipping on the server; never trust a browser-supplied fee.
+    const shippingQuote = await getCheapestShippingQuote(items, products, shippingAddress.pincode);
+    const safeShipping = shippingQuote.shippingCharge;
     const total = subtotal + safeShipping;
 
     // 1. Insufficient-balance pre-check (read-only) for wallet payments, so we
@@ -456,9 +501,8 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
 export const createRazorpayCheckoutOrder = async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = await resolveUserId(req.user!.uid);
-    const { items, shippingCharge = 0, shippingAddress, billingAddress, notes } = req.body as {
+    const { items, shippingAddress, billingAddress, notes } = req.body as {
       items: Array<{ productId: string; quantity: number; variant?: Record<string, any> }>;
-      shippingCharge?: number;
       shippingAddress: IEmbeddedAddress;
       billingAddress: IEmbeddedAddress;
       notes?: string;
@@ -509,7 +553,10 @@ export const createRazorpayCheckoutOrder = async (req: Request, res: Response): 
       }) * quantity;
     }
 
-    const total = subtotal + Math.max(0, Number(shippingCharge) || 0);
+    // Calculate the same authoritative Shiprocket charge before creating the Razorpay amount.
+    const shippingQuote = await getCheapestShippingQuote(items, products, shippingAddress.pincode);
+    const shippingCharge = shippingQuote.shippingCharge;
+    const total = subtotal + shippingCharge;
     if (total <= 0) {
       res.status(400).json({ success: false, message: 'Invalid order total' });
       return;
@@ -534,7 +581,7 @@ export const createRazorpayCheckoutOrder = async (req: Request, res: Response): 
     });
     await Order.create({
       userId: new mongoose.Types.ObjectId(userId), items: orderItems, shippingAddress, billingAddress,
-      subtotal, shippingCharge: Math.max(0, Number(shippingCharge) || 0), total,
+      subtotal, shippingCharge, total,
       notes, paymentMethod: 'razorpay', razorpayOrderId: order.id, status: OrderStatus.PENDING,
     });
 
@@ -812,7 +859,7 @@ export const retryShiprocketSync = async (req: Request, res: Response): Promise<
       return;
     }
 
-    await pushOrderToShiprocket(order);
+    await pushOrderToShiprocket(order, true);
     const updated = await OrderService.getOrderById(id);
 
     if (updated?.shiprocketSyncStatus === 'success') {
