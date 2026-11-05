@@ -280,6 +280,12 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
         res.status(200).json({ success: true, message: 'Order already confirmed', data: pending });
         return;
       }
+      const paymentAlreadyLinked = await Order.findOne({ razorpayPaymentId, _id: { $ne: pending._id } });
+      if (paymentAlreadyLinked) {
+        if (useTxn) await session.abortTransaction();
+        res.status(409).json({ success: false, message: 'This Razorpay payment is already linked to another order.' });
+        return;
+      }
       const validSignature = RazorpayService.verifyPaymentSignature(razorpayOrderId || '', razorpayPaymentId || '', razorpaySignature || '');
       const payment = validSignature ? await RazorpayService.getPayment(razorpayPaymentId || '') : null;
       if (!validSignature || payment?.status !== 'captured' || payment?.order_id !== razorpayOrderId ||
@@ -506,7 +512,7 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
 
 /**
  * Create a Razorpay order for the current cart so the client can open Razorpay
- * checkout. The order is only persisted after payment is verified in createOrder.
+ * checkout. A single pending order is persisted before payment and reused on retries.
  * POST /api/v1/orders/razorpay/create-order
  */
 export const createRazorpayCheckoutOrder = async (req: Request, res: Response): Promise<void> => {
@@ -824,7 +830,7 @@ export const updateAdminOrderStatus = async (req: Request, res: Response): Promi
       return;
     }
     if (currentOrder.paymentMethod === 'razorpay' && currentOrder.paymentStatus !== 'paid' &&
-        (currentOrder.paymentStatus === 'pending' || currentOrder.status === OrderStatus.PENDING) &&
+        ((Boolean(currentOrder.paymentStatus) && currentOrder.paymentStatus !== 'paid') || currentOrder.status === OrderStatus.PENDING) &&
         status !== OrderStatus.CANCELLED) {
       res.status(409).json({ success: false, message: 'Cannot process an unpaid Razorpay order. Verify payment first or cancel the order.' });
       return;
