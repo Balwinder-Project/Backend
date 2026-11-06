@@ -12,6 +12,7 @@ import { DiscountCampaignService } from '../services/discountCampaign.service';
 import { getEffectiveUnitPrice, PricingRole, RetailerCategoryDiscount } from '../utils/pricing';
 import { supportsTransactions } from '../utils/mongoTransactions';
 import Order, { IEmbeddedAddress, IOrder, IOrderItem, OrderStatus } from '../models/order.model';
+import CheckoutSession, { ICheckoutSession } from '../models/checkoutSession.model';
 import Salesman from '../models/salesman.model';
 import IncentiveLedgerEntry from '../models/incentiveLedger.model';
 
@@ -267,51 +268,31 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
       razorpaySignature?: string;
     };
 
-    // Razorpay checkout is persisted before payment. Finalize that exact order.
+    // Razorpay checkout data lives in CheckoutSessions, never in Orders.
+    // A final Order is created only after signature + captured payment verification.
     if (paymentMethod === 'razorpay') {
       if (!razorpayOrderId || !razorpayPaymentId || !razorpaySignature) {
         if (useTxn) await session.abortTransaction();
         res.status(400).json({ success: false, message: 'Razorpay payment details are incomplete.' });
         return;
       }
-      const pending = await Order.findOne({ razorpayOrderId, userId });
-      if (!pending) {
+      const checkout = await CheckoutSession.findOne({ razorpayOrderId, userId });
+      if (!checkout) {
         if (useTxn) await session.abortTransaction();
-        res.status(404).json({ success: false, message: 'Pending checkout not found. Please contact support with your payment ID.' });
+        res.status(404).json({ success: false, message: 'Checkout session not found. Please restart checkout.' });
         return;
       }
-      if (pending.status === OrderStatus.CONFIRMED && pending.razorpayPaymentId === razorpayPaymentId) {
-        if (useTxn) await session.abortTransaction();
-        res.status(200).json({ success: true, message: 'Order already confirmed', data: pending });
-        return;
-      }
-      const paymentAlreadyLinked = await Order.findOne({ razorpayPaymentId, _id: { $ne: pending._id } });
-      if (paymentAlreadyLinked) {
-        if (useTxn) await session.abortTransaction();
-        res.status(409).json({ success: false, message: 'This Razorpay payment is already linked to another order.' });
-        return;
-      }
-      const validSignature = RazorpayService.verifyPaymentSignature(razorpayOrderId || '', razorpayPaymentId || '', razorpaySignature || '');
-      const payment = validSignature ? await RazorpayService.getPayment(razorpayPaymentId || '') : null;
+      const validSignature = RazorpayService.verifyPaymentSignature(razorpayOrderId, razorpayPaymentId, razorpaySignature);
+      const payment = validSignature ? await RazorpayService.getPayment(razorpayPaymentId) : null;
       if (!validSignature || payment?.status !== 'captured' || payment?.order_id !== razorpayOrderId ||
-          Number(payment?.amount || 0) !== Math.round(pending.total * 100)) {
+          payment?.currency !== 'INR' || Number(payment?.amount || 0) !== Math.round(checkout.total * 100)) {
         if (useTxn) await session.abortTransaction();
-        res.status(400).json({ success: false, message: 'Payment verification failed or amount mismatch' });
+        res.status(400).json({ success: false, message: 'Payment verification failed or amount mismatch. No order has been placed.' });
         return;
       }
-      const confirmed = await Order.findOneAndUpdate(
-        { _id: pending._id, status: OrderStatus.PENDING, razorpayOrderId },
-        { $set: { status: OrderStatus.CONFIRMED, paymentStatus: 'paid', razorpayPaymentId } },
-        { new: true }
-      );
-      const finalOrder = confirmed || await Order.findOne({ razorpayOrderId, razorpayPaymentId });
-      if (!finalOrder) {
-        res.status(409).json({ success: false, message: 'Payment received; order confirmation is processing. Please refresh your orders.' });
-        return;
-      }
-      if (confirmed) pushOrderToShiprocket(confirmed).catch(() => {});
+      const finalOrder = await finalizePaidCheckoutSession(checkout, payment);
       if (useTxn && session.inTransaction()) await session.abortTransaction();
-      res.status(200).json({ success: true, message: 'Order placed successfully', data: finalOrder });
+      res.status(200).json({ success: true, message: 'Payment verified and order placed successfully', data: finalOrder });
       return;
     }
 
@@ -610,55 +591,43 @@ export const createRazorpayCheckoutOrder = async (req: Request, res: Response): 
       shippingAddress, billingAddress, subtotal, shippingCharge, total, notes: notes || '',
     })).digest('hex');
 
-    const respondWithExistingCheckout = async (existing: IOrder): Promise<void> => {
+    const respondWithExistingCheckout = async (existing: ICheckoutSession): Promise<void> => {
       if (existing.checkoutFingerprint !== checkoutFingerprint) {
         res.status(409).json({ success: false, message: 'Checkout details changed. Please restart checkout.' });
         return;
       }
-      if (existing.paymentStatus === 'paid') {
-        res.status(200).json({
-          success: true,
-          data: { alreadyPaid: true, orderId: String(existing._id), orderNumber: existing.orderNumber },
-        });
-        return;
-      }
-      if (existing.status === OrderStatus.CANCELLED || !existing.razorpayOrderId) {
-        res.status(409).json({ success: false, message: 'This checkout is no longer active. Please restart checkout.' });
+      if (existing.status === 'paid' && existing.finalOrderId) {
+        const finalOrder = await Order.findById(existing.finalOrderId);
+        res.status(200).json({ success: true, data: { alreadyPaid: true, orderId: finalOrder?._id, orderNumber: finalOrder?.orderNumber } });
         return;
       }
       const existingGatewayOrder = await RazorpayService.getOrder(existing.razorpayOrderId);
       res.status(200).json({
         success: true,
-        data: {
-          orderId: existingGatewayOrder.id,
-          amount: existingGatewayOrder.amount,
-          currency: existingGatewayOrder.currency,
-          keyId: process.env.RAZORPAY_KEY_ID,
-        },
+        data: { orderId: existingGatewayOrder.id, amount: existingGatewayOrder.amount, currency: existingGatewayOrder.currency, keyId: process.env.RAZORPAY_KEY_ID },
       });
     };
 
-    const existingCheckout = await Order.findOne({ userId, checkoutSessionId: checkoutSessionId.trim() });
+    const sessionId = checkoutSessionId.trim();
+    const existingCheckout = await CheckoutSession.findOne({ userId, checkoutSessionId: sessionId });
     if (existingCheckout) {
       await respondWithExistingCheckout(existingCheckout);
       return;
     }
 
     const amountInPaise = Math.round(total * 100);
-    const receipt = `ord_${userId.slice(-8)}_${Date.now()}`.slice(0, 40);
-    const gatewayOrder = await RazorpayService.createOrder(amountInPaise, 'INR', receipt, { userId, checkoutSessionId: checkoutSessionId.trim() });
+    const receipt = `chk_${userId.slice(-8)}_${Date.now()}`.slice(0, 40);
+    const gatewayOrder = await RazorpayService.createOrder(amountInPaise, 'INR', receipt, { userId, checkoutSessionId: sessionId });
     try {
-      await Order.create({
-        userId: new mongoose.Types.ObjectId(userId), items: orderItems, shippingAddress, billingAddress,
-        subtotal, shippingCharge, total, notes, paymentMethod: 'razorpay',
-        razorpayOrderId: gatewayOrder.id, checkoutSessionId: checkoutSessionId.trim(),
-        checkoutFingerprint, paymentStatus: 'pending', status: OrderStatus.PENDING,
+      await CheckoutSession.create({
+        userId: new mongoose.Types.ObjectId(userId),
+        items: orderItems, shippingAddress, billingAddress, subtotal, shippingCharge, total, notes,
+        razorpayOrderId: gatewayOrder.id, checkoutSessionId: sessionId, checkoutFingerprint,
+        status: 'pending', expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       });
     } catch (createError: any) {
-      // Concurrent duplicate requests can both reach Razorpay. The unique
-      // checkoutSessionId index ensures only one pending Mongo order survives.
       if (createError?.code !== 11000) throw createError;
-      const racedCheckout = await Order.findOne({ userId, checkoutSessionId: checkoutSessionId.trim() });
+      const racedCheckout = await CheckoutSession.findOne({ userId, checkoutSessionId: sessionId });
       if (!racedCheckout) throw createError;
       await respondWithExistingCheckout(racedCheckout);
       return;
@@ -698,6 +667,93 @@ async function findVerifiedCapturedPayment(orderId: string, total: number): Prom
     Number(payment?.amount || 0) === Math.round(total * 100) &&
     payment?.currency === 'INR'
   ) || null;
+}
+
+/**
+ * Create the customer-visible order only after Razorpay confirms a captured
+ * payment. checkoutSessionId is unique on Order, making webhook/browser retries
+ * idempotent and keeping unpaid attempts out of the Orders collection.
+ */
+async function finalizePaidCheckoutSession(session: ICheckoutSession, payment: any): Promise<IOrder> {
+  if (payment?.status !== 'captured' || payment?.order_id !== session.razorpayOrderId ||
+      Number(payment?.amount || 0) !== Math.round(session.total * 100) || payment?.currency !== 'INR') {
+    throw new Error('Razorpay payment is not captured or does not match checkout total');
+  }
+  const existing = await Order.findOne({ checkoutSessionId: session.checkoutSessionId });
+  if (existing) {
+    await CheckoutSession.updateOne({ _id: session._id }, { $set: { status: 'paid', razorpayPaymentId: payment.id, finalOrderId: existing._id } });
+    return existing;
+  }
+  const duplicatePayment = await Order.findOne({ razorpayPaymentId: payment.id });
+  if (duplicatePayment) throw new Error('This Razorpay payment is already linked to another order');
+
+  let order: IOrder;
+  try {
+    const [created] = await Order.create([{
+      userId: session.userId, items: session.items,
+      shippingAddress: session.shippingAddress, billingAddress: session.billingAddress,
+      subtotal: session.subtotal, shippingCharge: session.shippingCharge, total: session.total,
+      notes: session.notes, paymentMethod: 'razorpay', razorpayOrderId: session.razorpayOrderId,
+      razorpayPaymentId: payment.id, checkoutSessionId: session.checkoutSessionId,
+      checkoutFingerprint: session.checkoutFingerprint, paymentStatus: 'paid', status: OrderStatus.CONFIRMED,
+    }]);
+    order = created;
+  } catch (error: any) {
+    if (error?.code !== 11000) throw error;
+    const raced = await Order.findOne({ checkoutSessionId: session.checkoutSessionId });
+    if (!raced) throw error;
+    order = raced;
+  }
+
+  await CheckoutSession.updateOne(
+    { _id: session._id },
+    { $set: { status: 'paid', razorpayPaymentId: payment.id, finalOrderId: order._id } }
+  );
+
+  try {
+    const user = await User.findById(session.userId).select('firebaseUid');
+    const retailer = user?.firebaseUid ? await RetailerService.getRetailerByFirebaseUid(user.firebaseUid) : null;
+    if (retailer?.referredBySalesmanId) {
+      const salesman = await Salesman.findOne({ _id: retailer.referredBySalesmanId, status: 'active' });
+      if (salesman) {
+        const incentiveAmount = salesman.orderIncentiveMode === 'percentage'
+          ? Math.round((session.subtotal * salesman.orderIncentiveValue / 100) * 100) / 100
+          : salesman.orderIncentiveValue;
+        await IncentiveLedgerEntry.updateOne(
+          { idempotencyKey: `order:${String(order._id)}` },
+          { $setOnInsert: {
+            salesmanId: salesman._id, type: 'order', status: 'pending', retailerId: retailer._id,
+            orderId: order._id, orderNumber: order.orderNumber, eligibleOrderValue: session.subtotal,
+            amount: incentiveAmount, idempotencyKey: `order:${String(order._id)}`,
+            description: 'Order incentive pending delivery',
+          } },
+          { upsert: true },
+        );
+        await order.updateOne({ incentiveSalesmanId: salesman._id });
+      }
+    }
+  } catch (incentiveError) {
+    console.error('Paid Razorpay order incentive ledger creation failed:', incentiveError);
+  }
+
+  pushOrderToShiprocket(order).catch((error) =>
+    console.error('[razorpay finalize] Shiprocket sync failed:', error?.message || error)
+  );
+  return order;
+}
+
+async function reconcileRecentCheckoutSessions(userId?: string): Promise<void> {
+  const query: any = { status: { $in: ['pending', 'failed'] } };
+  if (userId) query.userId = userId;
+  const sessions = await CheckoutSession.find(query).sort({ createdAt: -1 }).limit(20);
+  await Promise.all(sessions.map(async (checkout) => {
+    try {
+      const payment = await findVerifiedCapturedPayment(checkout.razorpayOrderId, checkout.total);
+      if (payment?.id) await finalizePaidCheckoutSession(checkout, payment);
+    } catch (error: any) {
+      console.error(`[razorpay session reconcile] ${checkout.checkoutSessionId}:`, error?.message || error);
+    }
+  }));
 }
 
 async function reconcileCapturedRazorpayOrder(order: IOrder): Promise<IOrder | null> {
@@ -744,37 +800,46 @@ export const razorpayWebhook = async (req: Request, res: Response): Promise<void
     if (!orderId) return;
 
     if (event === 'payment.failed') {
-      await Order.updateOne(
-        { razorpayOrderId: orderId, status: OrderStatus.PENDING, paymentStatus: { $ne: 'paid' } },
-        { $set: { paymentStatus: 'failed' } },
-      );
+      await Promise.all([
+        Order.updateOne(
+          { razorpayOrderId: orderId, status: OrderStatus.PENDING, paymentStatus: { $ne: 'paid' } },
+          { $set: { paymentStatus: 'failed' } },
+        ),
+        CheckoutSession.updateOne(
+          { razorpayOrderId: orderId, status: { $ne: 'paid' } },
+          { $set: { status: 'failed' } },
+        ),
+      ]);
       return;
     }
     if (event !== 'payment.captured' && event !== 'order.paid') return;
 
     const pending = await Order.findOne({ razorpayOrderId: orderId });
-    if (!pending) {
-      console.error(`[razorpay webhook] captured event has no matching order ${orderId}`);
+    if (pending) {
+      const verifiedPayment = await findVerifiedCapturedPayment(orderId, pending.total);
+      if (!verifiedPayment?.id) return;
+      const linked = await Order.findOne({ razorpayPaymentId: verifiedPayment.id, _id: { $ne: pending._id } });
+      if (linked) return;
+      const confirmed = await Order.findOneAndUpdate(
+        { _id: pending._id, status: { $in: [OrderStatus.PENDING, OrderStatus.CONFIRMED] }, paymentStatus: { $ne: 'paid' } },
+        { $set: { status: OrderStatus.CONFIRMED, paymentStatus: 'paid', razorpayPaymentId: verifiedPayment.id } },
+        { new: true }
+      );
+      if (confirmed) pushOrderToShiprocket(confirmed).catch((error) =>
+        console.error('[razorpay webhook] Shiprocket sync failed:', error?.message || error)
+      );
       return;
     }
-    const verifiedPayment = await findVerifiedCapturedPayment(orderId, pending.total);
-    if (!verifiedPayment?.id) {
-      console.error(`[razorpay webhook] no matching captured payment found for order ${orderId}`);
+
+    const checkout = await CheckoutSession.findOne({ razorpayOrderId: orderId });
+    if (!checkout) {
+      console.error(`[razorpay webhook] no checkout session found for ${orderId}`);
       return;
     }
-    const linked = await Order.findOne({ razorpayPaymentId: verifiedPayment.id, _id: { $ne: pending._id } });
-    if (linked) {
-      console.error(`[razorpay webhook] payment ${verifiedPayment.id} is already linked to order ${linked.orderNumber}`);
-      return;
-    }
-    const confirmed = await Order.findOneAndUpdate(
-      { _id: pending._id, status: { $in: [OrderStatus.PENDING, OrderStatus.CONFIRMED] }, paymentStatus: { $ne: 'paid' } },
-      { $set: { status: OrderStatus.CONFIRMED, paymentStatus: 'paid', razorpayPaymentId: verifiedPayment.id } },
-      { new: true }
-    );
-    if (confirmed) pushOrderToShiprocket(confirmed).catch((error) =>
-      console.error('[razorpay webhook] Shiprocket sync failed:', error?.message || error)
-    );
+    const verifiedPayment = await findVerifiedCapturedPayment(orderId, checkout.total);
+    if (!verifiedPayment?.id) return;
+    await finalizePaidCheckoutSession(checkout, verifiedPayment);
+
   } catch (error: any) {
     console.error('[razorpay webhook] processing failed:', error?.message || error);
   }
@@ -786,6 +851,7 @@ export const getUserOrders = async (req: Request, res: Response): Promise<void> 
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 10;
 
+    await reconcileRecentCheckoutSessions(userId);
     const result = await OrderService.getUserOrders(userId, page, limit);
 
     res.status(200).json({
@@ -854,6 +920,7 @@ export const getAllOrdersAdmin = async (req: Request, res: Response): Promise<vo
     const limit = parseInt(req.query.limit as string) || 20;
     const status = req.query.status as string | undefined;
 
+    await reconcileRecentCheckoutSessions();
     const result = await OrderService.getAllOrders(page, limit, status);
 
     // Self-heal missed Razorpay webhooks whenever an admin opens the order list.

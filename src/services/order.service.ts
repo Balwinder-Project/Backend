@@ -159,7 +159,7 @@ export class OrderService {
     limit: number = 10
   ): Promise<PaginatedOrders> {
     const skip = (page - 1) * limit;
-    const query = { userId: new mongoose.Types.ObjectId(userId) };
+    const query: any = { userId: new mongoose.Types.ObjectId(userId), $or: [{ paymentMethod: { $ne: 'razorpay' } }, { paymentStatus: 'paid' }] };
 
     const [orders, total] = await Promise.all([
       Order.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit),
@@ -196,7 +196,7 @@ export class OrderService {
     status?: string
   ): Promise<PaginatedOrders> {
     const skip = (page - 1) * limit;
-    const query: any = {};
+    const query: any = { $or: [{ paymentMethod: { $ne: 'razorpay' } }, { paymentStatus: 'paid' }] };
     if (status) query.status = status;
 
     const [orders, total] = await Promise.all([
