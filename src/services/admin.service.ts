@@ -15,6 +15,22 @@ interface DashboardKpis {
   activeProductCount: number;
   featuredProductCount: number;
   retailerCount: number;
+  todayRevenue: number;
+  todayOrderCount: number;
+  outOfStockCount: number;
+  totalStockUnits: number;
+  inventoryRetailValue: number;
+  paidOrderCount: number;
+  unpaidOrderCount: number;
+  refundedOrderCount: number;
+  razorpayOrderCount: number;
+  walletOrderCount: number;
+  shiprocketPendingCount: number;
+  shiprocketFailedCount: number;
+  shippedOrderCount: number;
+  deliveredOrderCount: number;
+  cancelledOrderCount: number;
+  returnedOrderCount: number;
 }
 
 interface DashboardTrendPoint {
@@ -123,6 +139,12 @@ export class AdminService {
       topProductsResult,
       recentOrdersResult,
       lowStockProductsResult,
+      todayRevenueResult,
+      todayOrderCount,
+      outOfStockCount,
+      inventoryResult,
+      paymentBreakdownResult,
+      shipmentBreakdownResult,
     ] = await Promise.all([
       Order.countDocuments({ createdAt: { $gte: startDate } }),
       Order.aggregate<{ grossRevenue: number; revenueOrderCount: number }>([
@@ -212,13 +234,49 @@ export class AdminService {
         .lean(),
       Product.find({ stock: { $lte: LOW_STOCK_THRESHOLD } })
         .sort({ stock: 1, updatedAt: -1, createdAt: -1 })
-        .limit(6)
+        .limit(20)
         .select('name sku stock isActive')
         .lean(),
+      Order.aggregate<{ revenue: number }>([
+        { $match: { createdAt: { $gte: new Date(new Date().setHours(0, 0, 0, 0)) }, status: { $nin: NON_REVENUE_STATUSES } } },
+        { $group: { _id: null, revenue: { $sum: '$total' } } },
+      ]),
+      Order.countDocuments({ createdAt: { $gte: new Date(new Date().setHours(0, 0, 0, 0)) } }),
+      Product.countDocuments({ stock: { $lte: 0 } }),
+      Product.aggregate<{ totalStockUnits: number; inventoryRetailValue: number }>([
+        { $group: { _id: null, totalStockUnits: { $sum: '$stock' }, inventoryRetailValue: { $sum: { $multiply: ['$stock', '$price'] } } } },
+      ]),
+      Order.aggregate<{ _id: { paymentMethod: string; paymentStatus: string }; count: number }>([
+        { $match: { createdAt: { $gte: startDate } } },
+        { $group: { _id: { paymentMethod: '$paymentMethod', paymentStatus: '$paymentStatus' }, count: { $sum: 1 } } },
+      ]),
+      Order.aggregate<{ _id: { shiprocketSyncStatus: string; status: OrderStatus }; count: number }>([
+        { $match: { createdAt: { $gte: startDate } } },
+        { $group: { _id: { shiprocketSyncStatus: '$shiprocketSyncStatus', status: '$status' }, count: { $sum: 1 } } },
+      ]),
     ]);
 
     const grossRevenue = grossRevenueResult[0]?.grossRevenue ?? 0;
     const revenueOrderCount = grossRevenueResult[0]?.revenueOrderCount ?? 0;
+    const paymentCounts = paymentBreakdownResult.reduce((acc, item) => {
+      const method = item._id.paymentMethod;
+      const status = item._id.paymentStatus;
+      if (status === 'paid') acc.paid += item.count;
+      if (status === 'pending' || status === 'failed') acc.unpaid += item.count;
+      if (status === 'refunded') acc.refunded += item.count;
+      if (method === 'razorpay') acc.razorpay += item.count;
+      if (method === 'wallet') acc.wallet += item.count;
+      return acc;
+    }, { paid: 0, unpaid: 0, refunded: 0, razorpay: 0, wallet: 0 });
+    const shipmentCounts = shipmentBreakdownResult.reduce((acc, item) => {
+      if (item._id.shiprocketSyncStatus === 'pending' || item._id.shiprocketSyncStatus === 'processing') acc.shiprocketPending += item.count;
+      if (item._id.shiprocketSyncStatus === 'failed') acc.shiprocketFailed += item.count;
+      if (item._id.status === OrderStatus.SHIPPED || item._id.status === OrderStatus.OUT_FOR_DELIVERY) acc.shipped += item.count;
+      if (item._id.status === OrderStatus.DELIVERED) acc.delivered += item.count;
+      if (item._id.status === OrderStatus.CANCELLED) acc.cancelled += item.count;
+      if (item._id.status === OrderStatus.RETURNED) acc.returned += item.count;
+      return acc;
+    }, { shiprocketPending: 0, shiprocketFailed: 0, shipped: 0, delivered: 0, cancelled: 0, returned: 0 });
 
     const trendByDate = new Map(
       trendResults.map((item) => [
@@ -271,6 +329,22 @@ export class AdminService {
         activeProductCount,
         featuredProductCount,
         retailerCount,
+        todayRevenue: todayRevenueResult[0]?.revenue ?? 0,
+        todayOrderCount,
+        outOfStockCount,
+        totalStockUnits: inventoryResult[0]?.totalStockUnits ?? 0,
+        inventoryRetailValue: inventoryResult[0]?.inventoryRetailValue ?? 0,
+        paidOrderCount: paymentCounts.paid,
+        unpaidOrderCount: paymentCounts.unpaid,
+        refundedOrderCount: paymentCounts.refunded,
+        razorpayOrderCount: paymentCounts.razorpay,
+        walletOrderCount: paymentCounts.wallet,
+        shiprocketPendingCount: shipmentCounts.shiprocketPending,
+        shiprocketFailedCount: shipmentCounts.shiprocketFailed,
+        shippedOrderCount: shipmentCounts.shipped,
+        deliveredOrderCount: shipmentCounts.delivered,
+        cancelledOrderCount: shipmentCounts.cancelled,
+        returnedOrderCount: shipmentCounts.returned,
       },
       trends,
       orderStatusBreakdown: orderStatusBreakdownResult.map((item) => ({
