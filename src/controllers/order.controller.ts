@@ -685,6 +685,48 @@ export const createRazorpayCheckoutOrder = async (req: Request, res: Response): 
   }
 };
 
+/**
+ * Query Razorpay's canonical payment list instead of trusting webhook payload shape.
+ * This also recovers payments when a webhook was delayed, misconfigured, or missed.
+ */
+async function findVerifiedCapturedPayment(orderId: string, total: number): Promise<any | null> {
+  const response = await RazorpayService.getOrderPayments(orderId);
+  const payments = Array.isArray(response?.items) ? response.items : [];
+  return payments.find((payment: any) =>
+    payment?.status === 'captured' &&
+    payment?.order_id === orderId &&
+    Number(payment?.amount || 0) === Math.round(total * 100) &&
+    payment?.currency === 'INR'
+  ) || null;
+}
+
+async function reconcileCapturedRazorpayOrder(order: IOrder): Promise<IOrder | null> {
+  if (order.paymentMethod !== 'razorpay' || order.paymentStatus === 'paid' ||
+      !order.razorpayOrderId || order.status === OrderStatus.CANCELLED) return null;
+
+  const payment = await findVerifiedCapturedPayment(order.razorpayOrderId, order.total);
+  if (!payment?.id) return null;
+
+  const linked = await Order.findOne({ razorpayPaymentId: payment.id, _id: { $ne: order._id } });
+  if (linked) {
+    console.error(`[razorpay reconcile] payment ${payment.id} is already linked to order ${linked.orderNumber}`);
+    return null;
+  }
+
+  const confirmed = await Order.findOneAndUpdate(
+    { _id: order._id, status: { $in: [OrderStatus.PENDING, OrderStatus.CONFIRMED] }, paymentStatus: { $ne: 'paid' } },
+    { $set: { status: OrderStatus.CONFIRMED, paymentStatus: 'paid', razorpayPaymentId: payment.id } },
+    { new: true }
+  );
+  if (confirmed) {
+    console.info(`[razorpay reconcile] recovered captured payment for ${confirmed.orderNumber}`);
+    pushOrderToShiprocket(confirmed).catch((error) =>
+      console.error('[razorpay reconcile] Shiprocket sync failed:', error?.message || error)
+    );
+  }
+  return confirmed;
+}
+
 /** Recover captured payments even if the customer closes the browser. */
 export const razorpayWebhook = async (req: Request, res: Response): Promise<void> => {
   const rawBody: Buffer | undefined = (req as any).rawBody;
@@ -697,9 +739,10 @@ export const razorpayWebhook = async (req: Request, res: Response): Promise<void
   try {
     const event = req.body?.event;
     const payment = req.body?.payload?.payment?.entity;
-    const orderId = payment?.order_id || req.body?.payload?.order?.entity?.id;
-    const paymentId = payment?.id;
-    if (!orderId || !paymentId) return;
+    const gatewayOrder = req.body?.payload?.order?.entity;
+    const orderId = payment?.order_id || gatewayOrder?.id;
+    if (!orderId) return;
+
     if (event === 'payment.failed') {
       await Order.updateOne(
         { razorpayOrderId: orderId, status: OrderStatus.PENDING, paymentStatus: { $ne: 'paid' } },
@@ -708,27 +751,30 @@ export const razorpayWebhook = async (req: Request, res: Response): Promise<void
       return;
     }
     if (event !== 'payment.captured' && event !== 'order.paid') return;
-    if (payment?.status && payment.status !== 'captured') return;
+
     const pending = await Order.findOne({ razorpayOrderId: orderId });
     if (!pending) {
-      console.error(`[razorpay webhook] captured payment ${paymentId} has no matching pending order ${orderId}`);
+      console.error(`[razorpay webhook] captured event has no matching order ${orderId}`);
       return;
     }
-    if (Number(payment?.amount || 0) !== Math.round(pending.total * 100) || (payment?.currency && payment.currency !== 'INR')) {
-      console.error(`[razorpay webhook] amount/currency mismatch for order ${orderId}`);
+    const verifiedPayment = await findVerifiedCapturedPayment(orderId, pending.total);
+    if (!verifiedPayment?.id) {
+      console.error(`[razorpay webhook] no matching captured payment found for order ${orderId}`);
       return;
     }
-    const paymentAlreadyLinked = await Order.findOne({ razorpayPaymentId: paymentId, _id: { $ne: pending._id } });
-    if (paymentAlreadyLinked) {
-      console.error(`[razorpay webhook] payment ${paymentId} is already linked to order ${paymentAlreadyLinked.orderNumber}`);
+    const linked = await Order.findOne({ razorpayPaymentId: verifiedPayment.id, _id: { $ne: pending._id } });
+    if (linked) {
+      console.error(`[razorpay webhook] payment ${verifiedPayment.id} is already linked to order ${linked.orderNumber}`);
       return;
     }
     const confirmed = await Order.findOneAndUpdate(
-      { _id: pending._id, status: OrderStatus.PENDING },
-      { $set: { status: OrderStatus.CONFIRMED, paymentStatus: 'paid', razorpayPaymentId: paymentId } },
+      { _id: pending._id, status: { $in: [OrderStatus.PENDING, OrderStatus.CONFIRMED] }, paymentStatus: { $ne: 'paid' } },
+      { $set: { status: OrderStatus.CONFIRMED, paymentStatus: 'paid', razorpayPaymentId: verifiedPayment.id } },
       { new: true }
     );
-    if (confirmed) pushOrderToShiprocket(confirmed).catch(() => {});
+    if (confirmed) pushOrderToShiprocket(confirmed).catch((error) =>
+      console.error('[razorpay webhook] Shiprocket sync failed:', error?.message || error)
+    );
   } catch (error: any) {
     console.error('[razorpay webhook] processing failed:', error?.message || error);
   }
@@ -809,6 +855,20 @@ export const getAllOrdersAdmin = async (req: Request, res: Response): Promise<vo
     const status = req.query.status as string | undefined;
 
     const result = await OrderService.getAllOrders(page, limit, status);
+
+    // Self-heal missed Razorpay webhooks whenever an admin opens the order list.
+    // Only the current page is checked; payment is marked paid only after Razorpay
+    // confirms a captured payment with the exact order ID, amount, and currency.
+    await Promise.all(result.orders.map(async (order: IOrder, index: number) => {
+      if (order.paymentMethod !== 'razorpay' || order.paymentStatus === 'paid' ||
+          !order.razorpayOrderId || order.status === OrderStatus.CANCELLED) return;
+      try {
+        const reconciled = await reconcileCapturedRazorpayOrder(order);
+        if (reconciled) result.orders[index] = reconciled;
+      } catch (error: any) {
+        console.error(`[razorpay reconcile] unable to verify ${order.orderNumber}:`, error?.message || error);
+      }
+    }));
 
     res.status(200).json({
       success: true,
