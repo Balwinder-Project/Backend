@@ -742,6 +742,20 @@ async function finalizePaidCheckoutSession(session: ICheckoutSession, payment: a
   return order;
 }
 
+async function reconcileRecentCheckoutSessions(userId?: string): Promise<void> {
+  const query: any = { status: { $in: ['pending', 'failed'] } };
+  if (userId) query.userId = userId;
+  const sessions = await CheckoutSession.find(query).sort({ createdAt: -1 }).limit(20);
+  await Promise.all(sessions.map(async (checkout) => {
+    try {
+      const payment = await findVerifiedCapturedPayment(checkout.razorpayOrderId, checkout.total);
+      if (payment?.id) await finalizePaidCheckoutSession(checkout, payment);
+    } catch (error: any) {
+      console.error(`[razorpay session reconcile] ${checkout.checkoutSessionId}:`, error?.message || error);
+    }
+  }));
+}
+
 async function reconcileCapturedRazorpayOrder(order: IOrder): Promise<IOrder | null> {
   if (order.paymentMethod !== 'razorpay' || order.paymentStatus === 'paid' ||
       !order.razorpayOrderId || order.status === OrderStatus.CANCELLED) return null;
@@ -837,6 +851,7 @@ export const getUserOrders = async (req: Request, res: Response): Promise<void> 
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 10;
 
+    await reconcileRecentCheckoutSessions(userId);
     const result = await OrderService.getUserOrders(userId, page, limit);
 
     res.status(200).json({
@@ -905,6 +920,7 @@ export const getAllOrdersAdmin = async (req: Request, res: Response): Promise<vo
     const limit = parseInt(req.query.limit as string) || 20;
     const status = req.query.status as string | undefined;
 
+    await reconcileRecentCheckoutSessions();
     const result = await OrderService.getAllOrders(page, limit, status);
 
     // Self-heal missed Razorpay webhooks whenever an admin opens the order list.
