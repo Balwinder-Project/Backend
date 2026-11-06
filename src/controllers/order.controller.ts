@@ -12,6 +12,7 @@ import { DiscountCampaignService } from '../services/discountCampaign.service';
 import { getEffectiveUnitPrice, PricingRole, RetailerCategoryDiscount } from '../utils/pricing';
 import { supportsTransactions } from '../utils/mongoTransactions';
 import Order, { IEmbeddedAddress, IOrder, IOrderItem, OrderStatus } from '../models/order.model';
+import CheckoutSession, { ICheckoutSession } from '../models/checkoutSession.model';
 import Salesman from '../models/salesman.model';
 import IncentiveLedgerEntry from '../models/incentiveLedger.model';
 
