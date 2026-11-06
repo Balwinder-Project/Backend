@@ -21,11 +21,21 @@ export interface ICheckoutSession extends Document {
   updatedAt: Date;
 }
 
+const checkoutItemSchema = new Schema<IOrderItem>({
+  productId: { type: Schema.Types.ObjectId, ref: 'Product', required: true },
+  name: { type: String, required: true },
+  sku: { type: String, required: true },
+  quantity: { type: Number, required: true, min: 1 },
+  price: { type: Number, required: true, min: 0 },
+  variant: { type: Schema.Types.Mixed },
+  weight: { type: Number, required: true, default: 0.5 },
+}, { _id: false });
+
 const checkoutSessionSchema = new Schema<ICheckoutSession>({
   userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
   checkoutSessionId: { type: String, required: true, unique: true },
   checkoutFingerprint: { type: String, required: true },
-  items: { type: [Schema.Types.Mixed], required: true },
+  items: { type: [checkoutItemSchema], required: true },
   shippingAddress: { type: Schema.Types.Mixed, required: true },
   billingAddress: { type: Schema.Types.Mixed, required: true },
   subtotal: { type: Number, required: true },
