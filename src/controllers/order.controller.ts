@@ -786,10 +786,16 @@ export const razorpayWebhook = async (req: Request, res: Response): Promise<void
     if (!orderId) return;
 
     if (event === 'payment.failed') {
-      await Order.updateOne(
-        { razorpayOrderId: orderId, status: OrderStatus.PENDING, paymentStatus: { $ne: 'paid' } },
-        { $set: { paymentStatus: 'failed' } },
-      );
+      await Promise.all([
+        Order.updateOne(
+          { razorpayOrderId: orderId, status: OrderStatus.PENDING, paymentStatus: { $ne: 'paid' } },
+          { $set: { paymentStatus: 'failed' } },
+        ),
+        CheckoutSession.updateOne(
+          { razorpayOrderId: orderId, status: { $ne: 'paid' } },
+          { $set: { status: 'failed' } },
+        ),
+      ]);
       return;
     }
     if (event !== 'payment.captured' && event !== 'order.paid') return;
