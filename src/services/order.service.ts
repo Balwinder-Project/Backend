@@ -196,7 +196,9 @@ export class OrderService {
     status?: string
   ): Promise<PaginatedOrders> {
     const skip = (page - 1) * limit;
-    const query: any = { $or: [{ paymentMethod: { $ne: 'razorpay' } }, { paymentStatus: 'paid' }] };
+    // Admin order history must include legacy and unpaid Razorpay attempts for visibility.
+    // Payment/fulfilment safety is enforced separately by updateAdminOrderStatus and Shiprocket guards.
+    const query: any = {};
     if (status) query.status = status;
 
     const [orders, total] = await Promise.all([
