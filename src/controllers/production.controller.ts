@@ -64,7 +64,7 @@ export const createProductionStaff = async (req: Request, res: Response): Promis
     const email = String(req.body?.email || '').trim().toLowerCase();
     const password = String(req.body?.password || '');
     const displayName = String(req.body?.displayName || '').trim();
-    if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email) || password.length < 8 || displayName.length < 2) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || password.length < 8 || displayName.length < 2) {
       res.status(400).json({ success: false, message: 'Enter a valid email, a name (at least 2 characters), and a password of at least 8 characters.' });
       return;
     }
