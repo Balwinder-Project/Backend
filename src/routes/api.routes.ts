@@ -25,6 +25,7 @@ import namePlateConfigRoutes from './namePlateConfig.routes';
 import cartRoutes from './cart.routes';
 import salesIncentiveRoutes from './salesIncentive.routes';
 import wholesaleEnquiryRoutes from './wholesaleEnquiry.routes';
+import productionRoutes from './production.routes';
 
 const router = Router();
 
@@ -49,6 +50,7 @@ router.use(`${API_VERSION}/wallets`, walletRoutes);
 router.use(`${API_VERSION}/upload`, uploadRoutes);
 router.use(`${API_VERSION}/addresses`, addressRoutes);
 router.use(`${API_VERSION}/orders`, orderRoutes);
+router.use(`${API_VERSION}/production`, productionRoutes);
 router.use(`${API_VERSION}/qc`, qcRoutes);
 router.use(`${API_VERSION}/hero-slides`, heroSlideRoutes);
 router.use(`${API_VERSION}/mockup-templates`, mockupTemplateRoutes);
