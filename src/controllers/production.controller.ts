@@ -2,7 +2,6 @@ import { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import { auth } from '../config/firebase';
 import Order from '../models/order.model';
-import Product from '../models/product.model';
 
 const WORKFLOW = ['design_check', 'printing', 'cutting', 'packing', 'ready_for_dispatch'] as const;
 type WorkflowStatus = typeof WORKFLOW[number];
