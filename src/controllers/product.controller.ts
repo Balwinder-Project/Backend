@@ -270,7 +270,12 @@ export const getAllProducts = async (req: Request, res: Response): Promise<void>
       const campaignPercents = retailer ? new Map<string, number>() : await DiscountCampaignService.getActiveCategoryPercents();
       products = result.products.map((p: any) => {
         const obj = typeof p.toJSON === 'function' ? p.toJSON() : { ...p };
-        obj.images = transformProductImages(obj.images || [], 'thumbnail');
+        // Public product cards must never expose the clean, unwatermarked thumbnail.
+        // Serve the permanently watermarked derivative for non-Name-Plate products.
+        // Name Plate preview behavior remains unchanged.
+        obj.images = isNamePlateCategory(obj.category)
+          ? transformProductImages(obj.images || [], 'thumbnail')
+          : transformProductImages(obj.images || [], 'watermarked');
         return resolveBuyerPricing(obj, retailer, campaignPercents);
       });
     }
