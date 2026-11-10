@@ -14,6 +14,7 @@ import {
 } from '../controllers/order.controller';
 import { authenticateUser, requireModulePermission } from '../middleware/auth.middleware';
 import { validateRequest } from '../middleware/validateRequest';
+import { validateShippingCharge } from '../middleware/validateShippingCharge';
 import { shippingRatesValidator, createOrderValidator, updateOrderStatusValidator } from '../validators/order.validator';
 
 const router = Router();
@@ -24,8 +25,8 @@ router.post('/razorpay/webhook', razorpayWebhook);
 
 // Authenticated routes
 router.post('/shipping-rates', authenticateUser, shippingRatesValidator, validateRequest, getShippingRates);
-router.post('/', authenticateUser, createOrderValidator, validateRequest, createOrder);
-router.post('/razorpay/create-order', authenticateUser, createRazorpayCheckoutOrder);
+router.post('/', authenticateUser, createOrderValidator, validateRequest, validateShippingCharge, createOrder);
+router.post('/razorpay/create-order', authenticateUser, validateShippingCharge, createRazorpayCheckoutOrder);
 
 // Admin read routes — Product Editor and Owner can view orders.
 // Keep these before /:id to prevent "admin" being parsed as an ObjectId.
