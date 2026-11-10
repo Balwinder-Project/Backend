@@ -12,6 +12,7 @@ import { applyWatermark } from '../utils/watermark';
 
 const FORCE = process.argv.includes('--force');
 const MAX_ATTEMPTS = 3;
+const CONCURRENCY = Math.max(1, Math.min(8, Number(process.env.WATERMARK_CONCURRENCY) || 5));
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -46,6 +47,8 @@ const objectExists = async (key: string): Promise<boolean> => {
   }
 };
 
+type BackfillTask = { productName: string; imageUrl: string; key: string; wmKey: string };
+
 const run = async () => {
   let connected = false;
   try {
@@ -53,13 +56,13 @@ const run = async () => {
     connected = true;
 
     const products = await Product.find({}, { images: 1, name: 1 }).lean();
-    const tasks: Array<{ productName: string; imageUrl: string; key: string; wmKey: string }> = [];
+    const tasks: BackfillTask[] = [];
 
     for (const product of products) {
       const images: string[] = (product as any).images || [];
       for (const imageUrl of images) {
         if (imageUrl.includes('/design-requests/')) continue;
-        if (!/\.webp$/i.test(imageUrl) || /-(thumb|wm(?:-v\d+)?)\.webp$/i.test(imageUrl)) continue;
+        if (!/\\.webp$/i.test(imageUrl) || /-(thumb|wm(?:-v\\d+)?)\\.webp$/i.test(imageUrl)) continue;
         const key = keyFromUrl(imageUrl);
         if (!key) {
           console.warn(`Skipping non-B2 URL: ${imageUrl}`);
@@ -69,46 +72,52 @@ const run = async () => {
           productName: String((product as any).name || 'Unnamed product'),
           imageUrl,
           key,
-          wmKey: key.replace(/\.webp$/i, '-wm-v2.webp'),
+          wmKey: key.replace(/\\.webp$/i, '-wm-v2.webp'),
         });
       }
     }
 
-    console.log(`Found ${products.length} products and ${tasks.length} original images to check.`);
+    console.log(`Found ${products.length} products and ${tasks.length} original images to check. Concurrency=${CONCURRENCY}`);
     let created = 0;
     let skipped = 0;
     let failed = 0;
+    let completed = 0;
+    let nextIndex = 0;
 
-    for (let index = 0; index < tasks.length; index++) {
-      const task = tasks[index];
+    const processTask = async (task: BackfillTask, index: number) => {
       const label = `[${index + 1}/${tasks.length}] ${task.productName} — ${task.key}`;
-      console.log(`Checking ${label}`);
-
       try {
         if (!FORCE && await withRetry(task.wmKey, () => objectExists(task.wmKey))) {
           skipped++;
-          console.log(`  SKIP (already exists). Progress: created=${created}, skipped=${skipped}, failed=${failed}`);
-          continue;
+        } else {
+          const originalBuffer = await withRetry(task.key, () => downloadToBuffer(task.imageUrl));
+          const watermarkedBuffer = await withRetry(task.key + ' watermark', () => applyWatermark(originalBuffer));
+          await withRetry(task.wmKey + ' upload', () => s3Client.send(new PutObjectCommand({
+            Bucket: B2_BUCKET_NAME,
+            Key: task.wmKey,
+            Body: watermarkedBuffer,
+            ContentType: 'image/webp',
+          })));
+          created++;
         }
-
-        const originalBuffer = await withRetry(task.key, () => downloadToBuffer(task.imageUrl));
-        const watermarkedBuffer = await withRetry(task.key + ' watermark', () => applyWatermark(originalBuffer));
-        await withRetry(task.wmKey + ' upload', () => s3Client.send(new PutObjectCommand({
-          Bucket: B2_BUCKET_NAME,
-          Key: task.wmKey,
-          Body: watermarkedBuffer,
-          ContentType: 'image/webp',
-        })));
-
-        created++;
-        console.log(`  CREATED. Progress: created=${created}, skipped=${skipped}, failed=${failed}`);
       } catch (error: any) {
         failed++;
-        console.error(`  FAILED ${task.wmKey}: ${error?.message || error}`);
-        console.log(`  Continuing. Progress: created=${created}, skipped=${skipped}, failed=${failed}`);
+        console.error(`FAILED ${label}: ${error?.message || error}`);
+      } finally {
+        completed++;
+        console.log(`Progress ${completed}/${tasks.length} | created=${created} skipped=${skipped} failed=${failed}`);
       }
-    }
+    };
 
+    const worker = async () => {
+      while (true) {
+        const index = nextIndex++;
+        if (index >= tasks.length) return;
+        await processTask(tasks[index], index);
+      }
+    };
+
+    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, tasks.length) }, () => worker()));
     console.log(`BACKFILL COMPLETE: total=${tasks.length}, created=${created}, skipped=${skipped}, failed=${failed}`);
   } finally {
     if (connected) await disconnectDatabase();
