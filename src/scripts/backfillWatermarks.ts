@@ -62,7 +62,7 @@ const run = async () => {
       const images: string[] = (product as any).images || [];
       for (const imageUrl of images) {
         if (imageUrl.includes('/design-requests/')) continue;
-        if (!/\.webp$/i.test(imageUrl) || /-(thumb|wm(?:-v\d+)?)\\.webp$/i.test(imageUrl)) continue;
+        if (!/\.webp$/i.test(imageUrl) || /-(thumb|wm(?:-v\d+)?)\.webp$/i.test(imageUrl)) continue;
         const key = keyFromUrl(imageUrl);
         if (!key) {
           console.warn(`Skipping non-B2 URL: ${imageUrl}`);
