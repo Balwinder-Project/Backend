@@ -1,10 +1,9 @@
 /**
  * Backfill watermarked variants for existing product images.
  *
- * Older uploads only have `file.webp` + `file-thumb.webp` in B2. Now that the
- * public detail page serves `file-wm-v2.webp`, existing products would 404 on their
- * images until this runs. For every product image, this downloads the original,
- * composites the watermark, and uploads the `-wm-v2.webp` sibling.
+ * Older uploads only have `file.webp` + `file-thumb.webp` in B2. This script
+ * creates the permanent public `-wm-v2.webp` derivative for every product image,
+ * including previously-exempt generated mockup scenes.
  *
  * Usage:
  *   npx ts-node src/scripts/backfillWatermarks.ts          # process all
@@ -47,9 +46,9 @@ const run = async () => {
   for (const product of products) {
     const images: string[] = (product as any).images || [];
     for (const imageUrl of images) {
-      // Never watermark mockup scenes or private design-request references.
-      // Public mockups intentionally bypass watermarked variants in imageTransform.ts.
-      if (imageUrl.includes('/mockups/') || imageUrl.includes('/design-requests/')) continue;
+      // Design-request references are private admin-only assets; all product
+      // mockups must receive a public watermarked derivative like other images.
+      if (imageUrl.includes('/design-requests/')) continue;
 
       // Only process originals; skip anything that already looks like a variant.
       if (!/\.webp$/.test(imageUrl) || /-(thumb|wm)\.webp$/.test(imageUrl)) continue;
