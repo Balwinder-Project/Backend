@@ -56,10 +56,9 @@ export const uploadImageToB2 = async (
       })),
     ];
 
-    // Watermarked variant — skipped for mockup scenes (marketing assets) and
-    // design-request references (private admin-only creative assets).
-    const skipWatermark =
-      folder.startsWith('mockups') || folder.startsWith('design-requests');
+    // Permanently watermark every public product image, including generated
+    // mockup scenes. Only private design-request references stay unwatermarked.
+    const skipWatermark = folder.startsWith('design-requests');
     if (!skipWatermark) {
       const watermarkedBuffer = await applyWatermark(fileBuffer);
       uploads.push(
