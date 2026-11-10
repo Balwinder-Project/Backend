@@ -62,6 +62,17 @@ export interface IOrder extends Document {
   trackingUrl?: string;
   notes?: string;
   incentiveSalesmanId?: mongoose.Types.ObjectId;
+  productionAssignment?: {
+    staffUid: string;
+    staffName: string;
+    staffEmail: string;
+    assignedBy: string;
+    assignedAt: Date;
+    workflowStatus: 'design_check' | 'printing' | 'cutting' | 'packing' | 'ready_for_dispatch';
+    updatedAt: Date;
+    remarks?: string;
+    history: Array<{ status: string; changedBy: string; changedAt: Date; remarks?: string }>;
+  };
   createdAt: Date;
   updatedAt: Date;
 }
@@ -156,6 +167,22 @@ const orderSchema = new Schema<IOrder>(
     trackingUrl: { type: String },
     notes: { type: String },
     incentiveSalesmanId: { type: Schema.Types.ObjectId, ref: 'Salesman', index: true, immutable: true },
+    productionAssignment: {
+      staffUid: { type: String, index: true },
+      staffName: { type: String },
+      staffEmail: { type: String },
+      assignedBy: { type: String },
+      assignedAt: { type: Date },
+      workflowStatus: { type: String, enum: ['design_check', 'printing', 'cutting', 'packing', 'ready_for_dispatch'], default: 'design_check' },
+      updatedAt: { type: Date },
+      remarks: { type: String, maxlength: 1000 },
+      history: [{
+        status: { type: String, enum: ['assigned', 'design_check', 'printing', 'cutting', 'packing', 'ready_for_dispatch'] },
+        changedBy: { type: String },
+        changedAt: { type: Date },
+        remarks: { type: String, maxlength: 1000 },
+      }],
+    },
   },
   {
     timestamps: true,
