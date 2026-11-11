@@ -270,12 +270,10 @@ export const getAllProducts = async (req: Request, res: Response): Promise<void>
       const campaignPercents = retailer ? new Map<string, number>() : await DiscountCampaignService.getActiveCategoryPercents();
       products = result.products.map((p: any) => {
         const obj = typeof p.toJSON === 'function' ? p.toJSON() : { ...p };
-        // Public product cards must never expose the clean, unwatermarked thumbnail.
-        // Serve the permanently watermarked derivative for non-Name-Plate products.
-        // Name Plate preview behavior remains unchanged.
-        obj.images = isNamePlateCategory(obj.category)
-          ? transformProductImages(obj.images || [], 'thumbnail')
-          : transformProductImages(obj.images || [], 'watermarked');
+        // Use the standard thumbnail for public product cards.
+        // This removes the extra tiled watermark layer from listing previews;
+        // any watermark already embedded in the source artwork remains unchanged.
+        obj.images = transformProductImages(obj.images || [], 'thumbnail');
         return resolveBuyerPricing(obj, retailer, campaignPercents);
       });
     }
