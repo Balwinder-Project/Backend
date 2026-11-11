@@ -326,11 +326,11 @@ export const getProductById = async (req: Request, res: Response): Promise<void>
     }
 
     const productObj: any = typeof (product as any).toJSON === 'function' ? (product as any).toJSON() : { ...product };
-    // Name Plate products show clean product photos (no brand watermark).
-    // All other categories keep the watermarked high-res variant for the public PDP.
-    if (!isNamePlateCategory(productObj.category)) {
-      productObj.images = transformProductImages(productObj.images || [], 'watermarked');
-    }
+    // The uploaded source artwork already carries the approved single diagonal
+    // BND Creation watermark. Do not serve the additional -wm-v2 derivative
+    // on the public product detail page, as it stamps the same image a second time.
+    // Keep the original image URL so the existing watermark pattern stays unchanged.
+    // Name Plate behavior and admin image responses remain unchanged.
     const retailer = await getRequestingRetailer(req);
     const campaignPercents = retailer ? new Map<string, number>() : await DiscountCampaignService.getActiveCategoryPercents();
     resolveBuyerPricing(productObj, retailer, campaignPercents);
