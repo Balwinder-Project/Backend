@@ -5,7 +5,7 @@ import { MockupService } from '../services/mockup.service';
 import { RetailerService } from '../services/retailer.service';
 import { DiscountCampaignService } from '../services/discountCampaign.service';
 import { ADMIN_ROLE_CLAIM, hasAdminPermission } from '../constants/adminRoles';
-import { transformProductImages, isNamePlateCategory } from '../utils/imageTransform';
+import { transformProductImages } from '../utils/imageTransform';
 
 const parseBooleanQuery = (value: unknown): boolean | undefined => {
   if (typeof value !== 'string') return undefined;
