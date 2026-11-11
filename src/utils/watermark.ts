@@ -6,7 +6,7 @@ import path from 'path';
  * The logo is tiled diagonally over the source image.
  */
 const WATERMARK_PATH = path.join(process.cwd(), 'assets', 'watermark.png');
-const WATERMARK_OPACITY = 0.65;
+const WATERMARK_OPACITY = 0.45;
 // Denser diagonal logo tiling to match the approved reference artwork.
 const TILE_WIDTH_RATIO = 0.18;
 const GAP_X_RATIO = 0.12;
