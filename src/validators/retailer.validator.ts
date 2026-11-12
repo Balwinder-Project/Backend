@@ -6,7 +6,7 @@ import { INDIAN_STATES } from '../constants/indian-states';
  */
 export const validateRetailerData = (isUpdate: boolean = false) => {
   return (req: Request, res: Response, next: NextFunction): void => {
-    const { name, city, state, pincode, email, phone, password, sheetQuantity } = req.body;
+    const { name, city, state, pincode, email, phone, password, sheetQuantity, minimumOrderQuantity } = req.body;
     const errors: string[] = [];
 
     // Validate name
@@ -66,6 +66,11 @@ export const validateRetailerData = (isUpdate: boolean = false) => {
     if (sheetQuantity !== undefined && sheetQuantity !== null && sheetQuantity !== '') {
       const quantity = Number(sheetQuantity);
       if (!Number.isInteger(quantity) || quantity < 25) errors.push('Minimum wholesale order is 25 whole sheets');
+    }
+
+    if (minimumOrderQuantity !== undefined && minimumOrderQuantity !== null && minimumOrderQuantity !== '') {
+      const quantity = Number(minimumOrderQuantity);
+      if (!Number.isInteger(quantity) || quantity < 1) errors.push('SKU minimum order quantity must be a positive whole number');
     }
 
     // Validate password (required only for creation)

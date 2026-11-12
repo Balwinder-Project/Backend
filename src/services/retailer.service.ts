@@ -17,6 +17,7 @@ interface CreateRetailerData {
   city: string;
   district?: string;
   sheetQuantity?: number;
+  minimumOrderQuantity?: number;
   address?: string;
   requirement?: string;
   state: string;
@@ -34,6 +35,7 @@ interface UpdateRetailerData {
   city?: string;
   district?: string;
   sheetQuantity?: number;
+  minimumOrderQuantity?: number;
   address?: string;
   requirement?: string;
   state?: string;
@@ -75,6 +77,7 @@ export class RetailerService {
         city: data.city,
         district: data.district,
         sheetQuantity: data.sheetQuantity,
+        minimumOrderQuantity: data.minimumOrderQuantity ?? 1,
         address: data.address,
         requirement: data.requirement,
         state: data.state,
@@ -201,6 +204,7 @@ export class RetailerService {
       if (data.city) updateData.city = data.city;
       if (data.district !== undefined) updateData.district = data.district;
       if (data.sheetQuantity !== undefined) updateData.sheetQuantity = data.sheetQuantity;
+      if (data.minimumOrderQuantity !== undefined) updateData.minimumOrderQuantity = data.minimumOrderQuantity;
       if (data.address !== undefined) updateData.address = data.address;
       if (data.requirement !== undefined) updateData.requirement = data.requirement;
       if (data.state) updateData.state = data.state;

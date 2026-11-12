@@ -21,6 +21,7 @@ interface BuyerPricing {
   retailerId: string | null;
   retailerCategoryDiscounts: RetailerCategoryDiscount[];
   retailerProductPrices: Array<{ productId: string; slabs: Array<{ minQuantity: number; price: number }> }>;
+  minimumOrderQuantity: number;
 }
 
 /** Resolve the buyer's pricing role, retailer id, and negotiated category discounts. */
@@ -45,12 +46,12 @@ const resolvePricingContext = async (firebaseUid: string): Promise<BuyerPricing>
         productId: String(entry.productId),
         slabs: (entry.slabs || []).map((s: any) => ({ minQuantity: s.minQuantity, price: s.price })),
       }));
-      return { role: 'retailer', retailerId: String(retailer._id), retailerCategoryDiscounts, retailerProductPrices };
+      return { role: 'retailer', retailerId: String(retailer._id), retailerCategoryDiscounts, retailerProductPrices, minimumOrderQuantity: Math.max(1, Number(retailer.minimumOrderQuantity) || 1) };
     }
   } catch {
     /* fall through to normal pricing */
   }
-  return { role: 'normal', retailerId: null, retailerCategoryDiscounts: [], retailerProductPrices: [] };
+  return { role: 'normal', retailerId: null, retailerCategoryDiscounts: [], retailerProductPrices: [], minimumOrderQuantity: 1 };
 };
 
 const PICKUP_POSTCODE = process.env.SHIPROCKET_PICKUP_POSTCODE || '';
@@ -301,6 +302,14 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
     const productIds = items.map((i) => i.productId);
     const products = await Product.find({ _id: { $in: productIds } });
     const buyer = await resolvePricingContext(req.user!.uid);
+    if (buyer.role === 'retailer') {
+      const belowMinimum = items.find((item) => Math.floor(Number(item.quantity) || 0) < buyer.minimumOrderQuantity);
+      if (belowMinimum) {
+        if (useTxn) await session.abortTransaction();
+        res.status(400).json({ success: false, message: `Minimum order quantity for each SKU is ${buyer.minimumOrderQuantity} sheets. Please increase the quantity for every sticker SKU.` });
+        return;
+      }
+    }
     const campaignPercents = await DiscountCampaignService.getActiveCategoryPercents();
 
     // Total quantity per category across the order — retailer category-discount
@@ -522,6 +531,13 @@ export const createRazorpayCheckoutOrder = async (req: Request, res: Response): 
     // the Razorpay order amount can't be tampered with by the client.
     const products = await Product.find({ _id: { $in: items.map((i) => i.productId) } });
     const buyer = await resolvePricingContext(req.user!.uid);
+    if (buyer.role === 'retailer') {
+      const belowMinimum = items.find((item) => Math.floor(Number(item.quantity) || 0) < buyer.minimumOrderQuantity);
+      if (belowMinimum) {
+        res.status(400).json({ success: false, message: `Minimum order quantity for each SKU is ${buyer.minimumOrderQuantity} sheets. Please increase the quantity for every sticker SKU.` });
+        return;
+      }
+    }
     const campaignPercents = await DiscountCampaignService.getActiveCategoryPercents();
 
     const categoryTotals = new Map<string, number>();
