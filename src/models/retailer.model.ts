@@ -27,6 +27,7 @@ export interface IRetailer extends Document {
   city: string;
   district?: string;
   sheetQuantity?: number;
+  minimumOrderQuantity: number;
   address?: string;
   requirement?: string;
   state: string;
@@ -61,6 +62,7 @@ const retailerSchema = new Schema<IRetailer>(
     },
     district: { type: String, trim: true, maxlength: [100, 'District cannot exceed 100 characters'] },
     sheetQuantity: { type: Number, min: [25, 'Minimum wholesale order is 25 sheets'], validate: { validator: (value: number) => value == null || Number.isInteger(value), message: 'Sheet quantity must be a whole number' } },
+    minimumOrderQuantity: { type: Number, required: true, default: 1, min: [1, 'SKU minimum order quantity must be at least 1'], validate: { validator: Number.isInteger, message: 'SKU minimum order quantity must be a whole number' } },
     address: { type: String, trim: true, maxlength: [500, 'Address cannot exceed 500 characters'] },
     requirement: { type: String, trim: true, maxlength: [2000, 'Requirement cannot exceed 2000 characters'] },
     state: {
