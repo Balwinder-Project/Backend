@@ -163,6 +163,12 @@ export class ShiprocketService {
     return this.request<any>('GET', `/courier/track/awb/${awbCode}`);
   }
 
+  static async assignAwb(shipmentId: number, courierId?: number): Promise<any> {
+    const payload: Record<string, unknown> = { shipment_id: shipmentId };
+    if (courierId) payload.courier_id = courierId;
+    return this.request<any>('POST', '/courier/assign/awb', payload);
+  }
+
   static async requestPickup(shipmentId: number, pickupDate?: string): Promise<any> {
     const payload: Record<string, unknown> = { shipment_id: [shipmentId] };
     if (pickupDate) payload.pickup_date = [pickupDate];
