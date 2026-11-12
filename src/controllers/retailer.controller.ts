@@ -27,7 +27,7 @@ export const getMyRetailerStatus = async (req: Request, res: Response): Promise<
  */
 export const createRetailer = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { name, contactPerson, city, district, sheetQuantity, address, requirement, state, pincode, email, phone, password, categoryDiscounts, productPrices } = req.body;
+    const { name, contactPerson, city, district, sheetQuantity, minimumOrderQuantity, address, requirement, state, pincode, email, phone, password, categoryDiscounts, productPrices } = req.body;
 
     const retailer = await RetailerService.createRetailer({
       name,
@@ -35,6 +35,7 @@ export const createRetailer = async (req: Request, res: Response): Promise<void>
       city,
       district,
       sheetQuantity,
+      minimumOrderQuantity,
       address,
       requirement,
       state,
