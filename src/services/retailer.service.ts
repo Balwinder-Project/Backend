@@ -35,6 +35,7 @@ interface UpdateRetailerData {
   city?: string;
   district?: string;
   sheetQuantity?: number;
+  minimumOrderQuantity?: number;
   address?: string;
   requirement?: string;
   state?: string;
