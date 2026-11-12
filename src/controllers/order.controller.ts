@@ -1176,7 +1176,7 @@ export const generateShiprocketManifest = async (req: Request, res: Response): P
     }
     const result = await ShiprocketService.generateManifest(shipmentId);
     const manifestUrl = result?.manifest_url || result?.response?.manifest_url;
-    if (result?.status !== 1 || typeof manifestUrl !== 'string' || !/^https:\\/\\//i.test(manifestUrl)) {
+    if (result?.status !== 1 || typeof manifestUrl !== 'string' || !manifestUrl.startsWith('https://')) {
       res.status(502).json({ success: false, message: 'Shiprocket did not return a valid manifest URL.', data: result });
       return;
     }
