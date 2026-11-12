@@ -1156,7 +1156,7 @@ export const scheduleShiprocketPickup = async (req: Request, res: Response): Pro
       return;
     }
     const pickupDate = typeof req.body?.pickupDate === 'string' ? req.body.pickupDate : undefined;
-    if (pickupDate && !/^\\d{4}-\\d{2}-\\d{2}$/.test(pickupDate)) {
+    if (pickupDate && !/^\d{4}-\d{2}-\d{2}$/.test(pickupDate)) {
       res.status(400).json({ success: false, message: 'Pickup date must use YYYY-MM-DD format.' });
       return;
     }
