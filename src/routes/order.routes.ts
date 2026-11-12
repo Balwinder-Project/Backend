@@ -9,6 +9,9 @@ import {
   getAdminOrderById,
   updateAdminOrderStatus,
   retryShiprocketSync,
+  generateShiprocketAwb,
+  scheduleShiprocketPickup,
+  generateShiprocketManifest,
   shiprocketWebhook,
   razorpayWebhook,
 } from '../controllers/order.controller';
@@ -35,6 +38,9 @@ router.get('/admin/:id', authenticateUser, requireModulePermission('orders', 'vi
 // Order-changing actions remain on the existing admin guard.
 router.put('/admin/:id/status', authenticateUser, requireModulePermission('orders', 'edit'), updateOrderStatusValidator, validateRequest, updateAdminOrderStatus);
 router.post('/admin/:id/shiprocket-retry', authenticateUser, requireModulePermission('orders', 'edit'), retryShiprocketSync);
+router.post('/admin/:id/shiprocket-awb', authenticateUser, requireModulePermission('orders', 'edit'), generateShiprocketAwb);
+router.post('/admin/:id/shiprocket-pickup', authenticateUser, requireModulePermission('orders', 'edit'), scheduleShiprocketPickup);
+router.post('/admin/:id/shiprocket-manifest', authenticateUser, requireModulePermission('orders', 'edit'), generateShiprocketManifest);
 
 router.get('/', authenticateUser, getUserOrders);
 router.get('/:id', authenticateUser, getOrderById);

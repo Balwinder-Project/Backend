@@ -1091,6 +1091,151 @@ export const shiprocketWebhook = async (req: Request, res: Response): Promise<vo
 };
 
 /**
+ * Admin: assign a Shiprocket courier and generate an AWB for an order shipment.
+ * POST /api/v1/orders/admin/:id/shiprocket-awb
+ */
+export const generateShiprocketAwb = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const order = await Order.findById(req.params.id);
+    if (!order) {
+      res.status(404).json({ success: false, message: 'Order not found' });
+      return;
+    }
+    if (!order.shiprocketShipmentId) {
+      res.status(409).json({ success: false, message: 'Sync the order to Shiprocket before generating an AWB.' });
+      return;
+    }
+    if (order.awbCode) {
+      res.status(200).json({ success: true, message: 'AWB is already assigned.', data: order });
+      return;
+    }
+    const shipmentId = Number(order.shiprocketShipmentId);
+    if (!Number.isSafeInteger(shipmentId) || shipmentId <= 0) {
+      res.status(409).json({ success: false, message: 'Shiprocket shipment ID is invalid.' });
+      return;
+    }
+    const courierId = req.body?.courierId == null || req.body.courierId === '' ? undefined : Number(req.body.courierId);
+    if (courierId !== undefined && (!Number.isSafeInteger(courierId) || courierId <= 0)) {
+      res.status(400).json({ success: false, message: 'Courier ID must be a positive integer.' });
+      return;
+    }
+    const result = await ShiprocketService.assignAwb(shipmentId, courierId);
+    const details = result?.response?.data || result?.data || {};
+    const awb = details.awb_code || result?.awb_code;
+    if (result?.awb_assign_status !== 1 || typeof awb !== 'string' || !awb.trim()) {
+      res.status(502).json({ success: false, message: result?.response?.message || 'Shiprocket did not confirm AWB assignment.', data: result });
+      return;
+    }
+    order.awbCode = awb;
+    order.courierName = details.courier_name || result?.courier_name || order.courierName;
+    order.trackingUrl = `https://www.shiprocket.in/shipment-tracking/${encodeURIComponent(awb)}`;
+    await order.save();
+    res.status(200).json({ success: true, message: 'Courier assigned and AWB generated successfully.', data: order });
+  } catch (error: any) {
+    res.status(502).json({ success: false, message: error.message || 'Failed to generate Shiprocket AWB' });
+  }
+};
+
+/**
+ * Admin: schedule a Shiprocket pickup for an order with an assigned AWB.
+ * POST /api/v1/orders/admin/:id/shiprocket-pickup
+ */
+export const scheduleShiprocketPickup = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const order = await Order.findById(req.params.id);
+    if (!order) {
+      res.status(404).json({ success: false, message: 'Order not found' });
+      return;
+    }
+    if (!order.shiprocketShipmentId || !order.awbCode) {
+      res.status(409).json({ success: false, message: 'Sync the order and generate an AWB before scheduling pickup.' });
+      return;
+    }
+    if (order.shiprocketPickupStatus === 'scheduled') {
+      res.status(409).json({ success: false, message: 'Pickup is already scheduled for this order.', data: order });
+      return;
+    }
+    const pickupDate = typeof req.body?.pickupDate === 'string' ? req.body.pickupDate : undefined;
+    if (pickupDate && !/^\d{4}-\d{2}-\d{2}$/.test(pickupDate)) {
+      res.status(400).json({ success: false, message: 'Pickup date must use YYYY-MM-DD format.' });
+      return;
+    }
+    const shipmentId = Number(order.shiprocketShipmentId);
+    if (!Number.isSafeInteger(shipmentId) || shipmentId <= 0) {
+      res.status(409).json({ success: false, message: 'Shiprocket shipment ID is invalid.' });
+      return;
+    }
+
+    try {
+      const result = await ShiprocketService.requestPickup(shipmentId, pickupDate);
+      const response = result?.response || {};
+      const scheduledDate = response.pickup_scheduled_date || response.Booked_date || pickupDate;
+      const pickupSucceeded = result?.pickup_status === 1 || result?.status === 1 || response?.status === 1 || response?.status === 3;
+      order.shiprocketPickupStatus = pickupSucceeded ? 'scheduled' : 'failed';
+      order.shiprocketPickupDate = scheduledDate ? new Date(scheduledDate) : undefined;
+      order.shiprocketPickupToken = response.pickup_token_number || response.pickup_token || undefined;
+      order.shiprocketPickupError = pickupSucceeded ? undefined : 'Shiprocket did not confirm the pickup request.';
+      await order.save();
+      if (!pickupSucceeded) {
+        res.status(502).json({ success: false, message: order.shiprocketPickupError, data: order });
+        return;
+      }
+      res.status(200).json({ success: true, message: 'Shiprocket pickup request submitted.', data: order });
+    } catch (shiprocketError: any) {
+      order.shiprocketPickupStatus = 'failed';
+      order.shiprocketPickupError = String(shiprocketError?.message || 'Pickup request failed').slice(0, 1000);
+      await order.save();
+      res.status(502).json({ success: false, message: order.shiprocketPickupError, data: order });
+    }
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message || 'Failed to schedule Shiprocket pickup' });
+  }
+};
+
+/**
+ * Admin: generate and save the Shiprocket manifest after pickup has been requested.
+ * POST /api/v1/orders/admin/:id/shiprocket-manifest
+ */
+export const generateShiprocketManifest = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const order = await Order.findById(req.params.id);
+    if (!order) {
+      res.status(404).json({ success: false, message: 'Order not found' });
+      return;
+    }
+    if (!order.shiprocketShipmentId || !order.awbCode) {
+      res.status(409).json({ success: false, message: 'An AWB must be assigned before generating a manifest.' });
+      return;
+    }
+    if (order.shiprocketPickupStatus !== 'scheduled') {
+      res.status(409).json({ success: false, message: 'Schedule pickup successfully before generating the manifest.' });
+      return;
+    }
+    if (order.shiprocketManifestUrl) {
+      res.status(200).json({ success: true, message: 'Manifest is already generated.', data: order });
+      return;
+    }
+    const shipmentId = Number(order.shiprocketShipmentId);
+    if (!Number.isSafeInteger(shipmentId) || shipmentId <= 0) {
+      res.status(409).json({ success: false, message: 'Shiprocket shipment ID is invalid.' });
+      return;
+    }
+    const result = await ShiprocketService.generateManifest(shipmentId);
+    const manifestUrl = result?.manifest_url || result?.response?.manifest_url;
+    if (result?.status !== 1 || typeof manifestUrl !== 'string' || !manifestUrl.startsWith('https://')) {
+      res.status(502).json({ success: false, message: 'Shiprocket did not return a valid manifest URL.', data: result });
+      return;
+    }
+    order.shiprocketManifestUrl = manifestUrl;
+    order.shiprocketManifestGeneratedAt = new Date();
+    await order.save();
+    res.status(200).json({ success: true, message: 'Manifest generated successfully.', data: order });
+  } catch (error: any) {
+    res.status(502).json({ success: false, message: error.message || 'Failed to generate Shiprocket manifest' });
+  }
+};
+
+/**
  * Admin: retry pushing an order to Shiprocket after a failed sync.
  * POST /api/v1/orders/admin/:id/shiprocket-retry
  */

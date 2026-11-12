@@ -60,6 +60,12 @@ export interface IOrder extends Document {
   courierName?: string;
   estimatedDeliveryDate?: Date;
   trackingUrl?: string;
+  shiprocketPickupStatus?: 'pending' | 'scheduled' | 'failed';
+  shiprocketPickupDate?: Date;
+  shiprocketPickupToken?: string;
+  shiprocketPickupError?: string;
+  shiprocketManifestUrl?: string;
+  shiprocketManifestGeneratedAt?: Date;
   notes?: string;
   incentiveSalesmanId?: mongoose.Types.ObjectId;
   createdAt: Date;
@@ -154,6 +160,12 @@ const orderSchema = new Schema<IOrder>(
     courierName: { type: String },
     estimatedDeliveryDate: { type: Date },
     trackingUrl: { type: String },
+    shiprocketPickupStatus: { type: String, enum: ['pending', 'scheduled', 'failed'] },
+    shiprocketPickupDate: { type: Date },
+    shiprocketPickupToken: { type: String },
+    shiprocketPickupError: { type: String },
+    shiprocketManifestUrl: { type: String },
+    shiprocketManifestGeneratedAt: { type: Date },
     notes: { type: String },
     incentiveSalesmanId: { type: Schema.Types.ObjectId, ref: 'Salesman', index: true, immutable: true },
   },
