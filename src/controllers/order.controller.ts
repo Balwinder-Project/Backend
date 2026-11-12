@@ -1161,7 +1161,7 @@ export const generateShiprocketManifest = async (req: Request, res: Response): P
       res.status(409).json({ success: false, message: 'An AWB must be assigned before generating a manifest.' });
       return;
     }
-    if (!order.shiprocketPickupStatus || order.shiprocketPickupStatus === 'failed') {
+    if (order.shiprocketPickupStatus !== 'scheduled') {
       res.status(409).json({ success: false, message: 'Schedule pickup successfully before generating the manifest.' });
       return;
     }
