@@ -310,13 +310,6 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
         return;
       }
     }
-    if (buyer.role === 'retailer') {
-      const belowMinimum = items.find((item) => Math.floor(Number(item.quantity) || 0) < buyer.minimumOrderQuantity);
-      if (belowMinimum) {
-        res.status(400).json({ success: false, message: `Minimum order quantity for each SKU is ${buyer.minimumOrderQuantity} sheets. Please increase the quantity for every sticker SKU.` });
-        return;
-      }
-    }
     const campaignPercents = await DiscountCampaignService.getActiveCategoryPercents();
 
     // Total quantity per category across the order — retailer category-discount
@@ -538,6 +531,13 @@ export const createRazorpayCheckoutOrder = async (req: Request, res: Response): 
     // the Razorpay order amount can't be tampered with by the client.
     const products = await Product.find({ _id: { $in: items.map((i) => i.productId) } });
     const buyer = await resolvePricingContext(req.user!.uid);
+    if (buyer.role === 'retailer') {
+      const belowMinimum = items.find((item) => Math.floor(Number(item.quantity) || 0) < buyer.minimumOrderQuantity);
+      if (belowMinimum) {
+        res.status(400).json({ success: false, message: `Minimum order quantity for each SKU is ${buyer.minimumOrderQuantity} sheets. Please increase the quantity for every sticker SKU.` });
+        return;
+      }
+    }
     const campaignPercents = await DiscountCampaignService.getActiveCategoryPercents();
 
     const categoryTotals = new Map<string, number>();
