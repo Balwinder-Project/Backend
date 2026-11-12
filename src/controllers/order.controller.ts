@@ -1124,11 +1124,16 @@ export const scheduleShiprocketPickup = async (req: Request, res: Response): Pro
       const result = await ShiprocketService.requestPickup(shipmentId, pickupDate);
       const response = result?.response || {};
       const scheduledDate = response.pickup_scheduled_date || response.Booked_date || pickupDate;
-      order.shiprocketPickupStatus = result?.pickup_status === 1 || response?.status === 3 ? 'scheduled' : 'pending';
+      const pickupSucceeded = result?.pickup_status === 1 || response?.status === 3;
+      order.shiprocketPickupStatus = pickupSucceeded ? 'scheduled' : 'failed';
       order.shiprocketPickupDate = scheduledDate ? new Date(scheduledDate) : undefined;
       order.shiprocketPickupToken = response.pickup_token_number || response.pickup_token || undefined;
-      order.shiprocketPickupError = undefined;
+      order.shiprocketPickupError = pickupSucceeded ? undefined : 'Shiprocket did not confirm the pickup request.';
       await order.save();
+      if (!pickupSucceeded) {
+        res.status(502).json({ success: false, message: order.shiprocketPickupError, data: order });
+        return;
+      }
       res.status(200).json({ success: true, message: 'Shiprocket pickup request submitted.', data: order });
     } catch (shiprocketError: any) {
       order.shiprocketPickupStatus = 'failed';
