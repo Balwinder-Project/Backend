@@ -105,7 +105,8 @@ async function getCheapestShippingQuote(
  */
 export async function pushOrderToShiprocket(order: IOrder, forceRetry = false): Promise<void> {
   const orderId = (order._id as any).toString();
-  if (order.paymentStatus !== 'paid' ||
+  const walletPaymentVerified = order.paymentMethod === 'wallet' && Boolean(order.walletTransactionId);
+  if ((order.paymentStatus !== 'paid' && !walletPaymentVerified) ||
       order.status === OrderStatus.PENDING ||
       order.status === OrderStatus.CANCELLED ||
       order.status === OrderStatus.RETURNED) {
@@ -1303,7 +1304,8 @@ export const retryShiprocketSync = async (req: Request, res: Response): Promise<
       res.status(400).json({ success: false, message: 'Order is already synced to Shiprocket', data: order });
       return;
     }
-    if (order.paymentStatus !== 'paid' || order.status === OrderStatus.PENDING ||
+    const walletPaymentVerified = order.paymentMethod === 'wallet' && Boolean(order.walletTransactionId);
+    if ((order.paymentStatus !== 'paid' && !walletPaymentVerified) || order.status === OrderStatus.PENDING ||
         order.status === OrderStatus.CANCELLED || order.status === OrderStatus.RETURNED) {
       res.status(400).json({ success: false, message: 'Only confirmed, paid orders can be synced to Shiprocket', data: order });
       return;
