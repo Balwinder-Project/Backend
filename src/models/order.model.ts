@@ -59,6 +59,12 @@ export interface IOrder extends Document {
   awbCode?: string;
   courierName?: string;
   estimatedDeliveryDate?: Date;
+  shiprocketCurrentStatus?: string;
+  shiprocketCurrentStatusId?: number;
+  shiprocketShipmentStatus?: string;
+  shiprocketLastTrackingAt?: Date;
+  shiprocketUndeliveredReason?: string;
+  shiprocketReturnAwbCode?: string;
   trackingUrl?: string;
   shiprocketPickupStatus?: 'pending' | 'scheduled' | 'failed';
   shiprocketPickupDate?: Date;
@@ -159,6 +165,12 @@ const orderSchema = new Schema<IOrder>(
     awbCode: { type: String, index: true },
     courierName: { type: String },
     estimatedDeliveryDate: { type: Date },
+    shiprocketCurrentStatus: { type: String },
+    shiprocketCurrentStatusId: { type: Number },
+    shiprocketShipmentStatus: { type: String },
+    shiprocketLastTrackingAt: { type: Date },
+    shiprocketUndeliveredReason: { type: String },
+    shiprocketReturnAwbCode: { type: String },
     trackingUrl: { type: String },
     shiprocketPickupStatus: { type: String, enum: ['pending', 'scheduled', 'failed'] },
     shiprocketPickupDate: { type: Date },
