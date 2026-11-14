@@ -16,7 +16,10 @@ export async function runShiprocketRetrySweep(): Promise<void> {
     const staleProcessing = new Date(now.getTime() - 10 * 60 * 1000);
     const candidates = await Order.find({
       status: { $in: [OrderStatus.CONFIRMED, OrderStatus.PROCESSING] },
-      paymentStatus: 'paid',
+      $or: [
+        { paymentStatus: 'paid' },
+        { paymentMethod: 'wallet', walletTransactionId: { $exists: true, $ne: null } },
+      ],
       shiprocketOrderId: { $exists: false },
       $and: [
         {
