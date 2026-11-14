@@ -1083,7 +1083,7 @@ export const shiprocketWebhook = async (req: Request, res: Response): Promise<vo
     const track = payload?.shipment_track?.[0] || payload?.tracking_data?.shipment_track?.[0] || {};
     const awb = String(payload?.awb || payload?.awb_code || track?.awb_code || '').trim();
     const rawStatus = String(payload?.current_status || track?.current_status || payload?.shipment_status || '').trim();
-    const normalizedStatus = rawStatus.toUpperCase().replace(/[_-]+/g, ' ').replace(/\\s+/g, ' ');
+    const normalizedStatus = rawStatus.toUpperCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ');
     const statusId = Number(payload?.current_status_id ?? track?.current_status_id ?? payload?.shipment_status_id);
     const mappedStatus = (Number.isFinite(statusId) ? SHIPROCKET_STATUS_ID_MAP[statusId] : undefined) ||
       SHIPROCKET_STATUS_MAP[normalizedStatus];
