@@ -17,8 +17,8 @@ export async function runShiprocketRetrySweep(): Promise<void> {
     const candidates = await Order.find({
       status: { $in: [OrderStatus.CONFIRMED, OrderStatus.PROCESSING] },
       $or: [
-        { paymentMethod: 'wallet' },
-        { razorpayPaymentId: { $exists: true, $ne: null } },
+        { paymentStatus: 'paid' },
+        { paymentMethod: 'wallet', walletTransactionId: { $exists: true, $ne: null } },
       ],
       shiprocketOrderId: { $exists: false },
       $and: [

@@ -21,7 +21,10 @@ import { shippingRatesValidator, createOrderValidator, updateOrderStatusValidato
 
 const router = Router();
 
-// Webhook MUST come first — no auth, AWB-based verification
+// Shiprocket webhook: configure this neutral URL in Shiprocket Settings > API > Webhooks.
+// Shiprocket disallows webhook URLs containing provider-specific keywords.
+router.post('/delivery/tracking-hook', shiprocketWebhook);
+// Backward-compatible alias for any existing manual integrations.
 router.post('/shiprocket/webhook', shiprocketWebhook);
 router.post('/razorpay/webhook', razorpayWebhook);
 
