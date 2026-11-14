@@ -1023,21 +1023,6 @@ export const updateAdminOrderStatus = async (req: Request, res: Response): Promi
 // Shiprocket sends status labels in uppercase and also supplies numeric status IDs.
 // Keep transient events (delay, undelivered, RTO initiated) in the tracking fields
 // without falsely marking the customer order as delivered or returned.
-const SHIPROCKET_STATUS_ID_MAP: Record<number, string> = {
-  6: 'shipped',
-  7: 'delivered',
-  8: 'cancelled',
-  10: 'returned',
-  13: 'processing',
-  15: 'processing',
-  17: 'out_for_delivery',
-  18: 'shipped',
-  20: 'processing',
-  27: 'processing',
-  42: 'shipped',
-  45: 'cancelled',
-};
-
 const SHIPROCKET_STATUS_MAP: Record<string, string> = {
   'PICKUP PENDING': 'processing',
   'PICKUP SCHEDULED': 'processing',
@@ -1085,9 +1070,11 @@ export const shiprocketWebhook = async (req: Request, res: Response): Promise<vo
     const awb = String(payload?.awb || payload?.awb_code || track?.awb_code || '').trim();
     const rawStatus = String(payload?.current_status || track?.current_status || payload?.shipment_status || '').trim();
     const normalizedStatus = rawStatus.toUpperCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ');
-    const statusId = Number(payload?.current_status_id ?? track?.current_status_id ?? payload?.shipment_status_id);
-    const mappedStatus = (Number.isFinite(statusId) ? SHIPROCKET_STATUS_ID_MAP[statusId] : undefined) ||
-      SHIPROCKET_STATUS_MAP[normalizedStatus];
+    // Keep current_status_id as provider metadata only. Shiprocket also sends
+    // shipment_status_id, which is a different status-code namespace.
+    const statusIdValue = payload?.current_status_id ?? track?.current_status_id;
+    const statusId = statusIdValue == null || statusIdValue === '' ? undefined : Number(statusIdValue);
+    const mappedStatus = SHIPROCKET_STATUS_MAP[normalizedStatus];
 
     if (!awb || !rawStatus) {
       console.warn('[shiprocket webhook] ignored payload without AWB/status');
@@ -1107,7 +1094,7 @@ export const shiprocketWebhook = async (req: Request, res: Response): Promise<vo
 
     if (mayAdvance && mappedStatus) order.status = mappedStatus as OrderStatus;
     order.shiprocketCurrentStatus = rawStatus.slice(0, 120);
-    if (Number.isFinite(statusId)) order.shiprocketCurrentStatusId = statusId;
+    if (statusId !== undefined && Number.isFinite(statusId)) order.shiprocketCurrentStatusId = statusId;
     order.shiprocketLastTrackingAt = new Date();
     order.shiprocketShipmentStatus = String(payload?.shipment_status || track?.shipment_status || rawStatus).slice(0, 120);
     order.courierName = payload?.courier_name || track?.courier_name || order.courierName;
