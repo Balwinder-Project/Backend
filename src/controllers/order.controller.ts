@@ -105,8 +105,11 @@ async function getCheapestShippingQuote(
  */
 export async function pushOrderToShiprocket(order: IOrder, forceRetry = false): Promise<void> {
   const orderId = (order._id as any).toString();
-  if (order.paymentMethod === 'razorpay' && order.paymentStatus !== 'paid') {
-    console.warn(`[shiprocket] refusing to sync unpaid Razorpay order ${order.orderNumber}`);
+  if (order.paymentStatus !== 'paid' ||
+      order.status === OrderStatus.PENDING ||
+      order.status === OrderStatus.CANCELLED ||
+      order.status === OrderStatus.RETURNED) {
+    console.warn(`[shiprocket] refusing to sync unpaid or non-fulfillable order ${order.orderNumber}`);
     return;
   }
   try {
@@ -1016,77 +1019,126 @@ export const updateAdminOrderStatus = async (req: Request, res: Response): Promi
   }
 };
 
-// Shiprocket webhook status mapping
+// Shiprocket sends status labels in uppercase and also supplies numeric status IDs.
+// Keep transient events (delay, undelivered, RTO initiated) in the tracking fields
+// without falsely marking the customer order as delivered or returned.
+const SHIPROCKET_STATUS_ID_MAP: Record<number, string> = {
+  6: 'shipped',
+  7: 'delivered',
+  8: 'cancelled',
+  10: 'returned',
+  13: 'processing',
+  15: 'processing',
+  17: 'out_for_delivery',
+  18: 'shipped',
+  20: 'processing',
+  27: 'processing',
+  42: 'shipped',
+  45: 'cancelled',
+};
+
 const SHIPROCKET_STATUS_MAP: Record<string, string> = {
-  'Pickup Pending': 'processing',
-  'Pickup Scheduled': 'processing',
-  'Pickup Generated': 'processing',
-  'In Transit': 'shipped',
-  'Shipped': 'shipped',
-  'Out For Delivery': 'out_for_delivery',
-  'Delivered': 'delivered',
-  'Cancelled': 'cancelled',
-  'RTO': 'returned',
-  'RTO Delivered': 'returned',
-  'Return': 'returned',
+  'PICKUP PENDING': 'processing',
+  'PICKUP SCHEDULED': 'processing',
+  'PICKUP GENERATED': 'processing',
+  'PICKUP BOOKED': 'processing',
+  'PICKED UP': 'shipped',
+  'HANDOVER TO COURIER': 'shipped',
+  'IN TRANSIT': 'shipped',
+  'SHIPPED': 'shipped',
+  'REACHED AT DESTINATION HUB': 'shipped',
+  'OUT FOR DELIVERY': 'out_for_delivery',
+  'DELIVERED': 'delivered',
+  'CANCELLED': 'cancelled',
+  'CANCELED': 'cancelled',
+  'CANCELLED BEFORE DISPATCHED': 'cancelled',
+  'RTO DELIVERED': 'returned',
+  'RETURN': 'returned',
+};
+
+const SHIPROCKET_STATUS_RANK: Record<string, number> = {
+  pending: 0, confirmed: 1, processing: 2, shipped: 3,
+  out_for_delivery: 4, delivered: 5, cancelled: 5, returned: 5,
 };
 
 export const shiprocketWebhook = async (req: Request, res: Response): Promise<void> => {
-  // Always acknowledge immediately to prevent Shiprocket retries
+  const configuredSecret = process.env.SHIPROCKET_WEBHOOK_SECRET;
+  const suppliedSecret = req.header('x-api-key') || '';
+  if (!configuredSecret || !suppliedSecret) {
+    res.status(401).json({ success: false, message: 'Shiprocket webhook authentication is not configured' });
+    return;
+  }
+  const expected = Buffer.from(configuredSecret);
+  const supplied = Buffer.from(suppliedSecret);
+  if (expected.length !== supplied.length || !crypto.timingSafeEqual(expected, supplied)) {
+    res.status(401).json({ success: false, message: 'Invalid webhook token' });
+    return;
+  }
+
+  // Shiprocket requires an HTTP 200 acknowledgement for accepted webhook calls.
   res.status(200).json({ success: true });
 
   try {
-    const payload = req.body;
-    const awb: string | undefined = payload?.awb || payload?.shipment_track?.[0]?.awb_code;
-    const currentStatus: string | undefined = payload?.current_status || payload?.shipment_track?.[0]?.current_status;
+    const payload = req.body || {};
+    const track = payload?.shipment_track?.[0] || payload?.tracking_data?.shipment_track?.[0] || {};
+    const awb = String(payload?.awb || payload?.awb_code || track?.awb_code || '').trim();
+    const rawStatus = String(payload?.current_status || track?.current_status || payload?.shipment_status || '').trim();
+    const normalizedStatus = rawStatus.toUpperCase().replace(/[_-]+/g, ' ').replace(/\\s+/g, ' ');
+    const statusId = Number(payload?.current_status_id ?? track?.current_status_id ?? payload?.shipment_status_id);
+    const mappedStatus = (Number.isFinite(statusId) ? SHIPROCKET_STATUS_ID_MAP[statusId] : undefined) ||
+      SHIPROCKET_STATUS_MAP[normalizedStatus];
 
-    if (!awb || !currentStatus) {
-      console.log('Shiprocket webhook: missing awb or current_status', payload);
+    if (!awb || !rawStatus) {
+      console.warn('[shiprocket webhook] ignored payload without AWB/status');
       return;
     }
 
-    const mappedStatus = SHIPROCKET_STATUS_MAP[currentStatus];
-    if (!mappedStatus) {
-      console.log(`Shiprocket webhook: unknown status "${currentStatus}", skipping`);
+    const order = await Order.findOne({ awbCode: awb });
+    if (!order) {
+      console.warn(`[shiprocket webhook] no BND order found for AWB ${awb}`);
       return;
     }
 
-    const estimatedDate = payload?.etd ? new Date(payload.etd) : undefined;
-    const courierName = payload?.courier_name || payload?.shipment_track?.[0]?.courier_name;
+    const currentRank = SHIPROCKET_STATUS_RANK[order.status] ?? 0;
+    const incomingRank = mappedStatus ? (SHIPROCKET_STATUS_RANK[mappedStatus] ?? 0) : -1;
+    const mayAdvance = Boolean(mappedStatus) &&
+      (order.status === mappedStatus || (!['delivered', 'cancelled', 'returned'].includes(order.status) && incomingRank >= currentRank));
 
-    const updatedOrder = await OrderService.updateOrderStatus(awb, {
-      status: mappedStatus as any,
-      courierName,
-      estimatedDeliveryDate: estimatedDate,
-    });
+    if (mayAdvance && mappedStatus) order.status = mappedStatus as OrderStatus;
+    order.shiprocketCurrentStatus = rawStatus.slice(0, 120);
+    if (Number.isFinite(statusId)) order.shiprocketCurrentStatusId = statusId;
+    order.shiprocketLastTrackingAt = new Date();
+    order.shiprocketShipmentStatus = String(payload?.shipment_status || track?.shipment_status || rawStatus).slice(0, 120);
+    order.courierName = payload?.courier_name || track?.courier_name || order.courierName;
+    const etd = payload?.etd || track?.etd;
+    if (etd && !Number.isNaN(new Date(etd).getTime())) order.estimatedDeliveryDate = new Date(etd);
+    const undeliveredReason = payload?.undelivered_reason || track?.undelivered_reason;
+    if (undeliveredReason) order.shiprocketUndeliveredReason = String(undeliveredReason).slice(0, 500);
+    const returnAwb = payload?.return_awb_code || track?.return_awb_code;
+    if (returnAwb) order.shiprocketReturnAwbCode = String(returnAwb).slice(0, 80);
+    if (order.awbCode) order.trackingUrl = `https://www.shiprocket.in/shipment-tracking/${encodeURIComponent(order.awbCode)}`;
+    await order.save();
 
-    // Keep the incentive ledger in sync when delivery/return arrives from Shiprocket.
-    // The admin status endpoint has the same rules; paid/reversed entries stay immutable.
-    if (updatedOrder && ['delivered', 'cancelled', 'returned'].includes(mappedStatus)) {
+    if (mayAdvance && mappedStatus && ['delivered', 'cancelled', 'returned'].includes(mappedStatus)) {
       try {
-        const ledger = await IncentiveLedgerEntry.findOne({
-          idempotencyKey: `order:${String(updatedOrder._id)}`,
-        });
+        const ledger = await IncentiveLedgerEntry.findOne({ idempotencyKey: `order:${String(order._id)}` });
         if (ledger && ledger.status !== 'paid' && ledger.status !== 'reversed') {
-          if (mappedStatus === 'delivered') {
-            ledger.status = 'payable';
-          } else {
+          if (mappedStatus === 'delivered') ledger.status = 'payable';
+          else {
             ledger.status = 'reversed';
-            ledger.description = [
-              ledger.description,
-              `Automatically reversed: Shiprocket order ${mappedStatus}`,
-            ].filter(Boolean).join(' | ').slice(0, 500);
+            ledger.description = [ledger.description, `Automatically reversed: Shiprocket order ${mappedStatus}`]
+              .filter(Boolean).join(' | ').slice(0, 500);
           }
           await ledger.save();
         }
       } catch (incentiveError) {
-        console.error('Shiprocket incentive ledger status update failed:', incentiveError);
+        console.error('[shiprocket webhook] incentive ledger update failed:', incentiveError);
       }
     }
 
-    console.log(`Shiprocket webhook: updated order with AWB ${awb} to status ${mappedStatus}`);
+    console.info(`[shiprocket webhook] ${order.orderNumber}: ${rawStatus} (AWB ${awb})`);
   } catch (error: any) {
-    console.error('Shiprocket webhook processing error (non-fatal):', error.message);
+    console.error('[shiprocket webhook] processing failed:', error?.message || error);
   }
 };
 
@@ -1251,8 +1303,8 @@ export const retryShiprocketSync = async (req: Request, res: Response): Promise<
       res.status(400).json({ success: false, message: 'Order is already synced to Shiprocket', data: order });
       return;
     }
-    if (order.status === OrderStatus.PENDING || order.status === OrderStatus.CANCELLED || order.status === OrderStatus.RETURNED ||
-        (order.paymentMethod === 'razorpay' && Boolean(order.paymentStatus) && order.paymentStatus !== 'paid')) {
+    if (order.paymentStatus !== 'paid' || order.status === OrderStatus.PENDING ||
+        order.status === OrderStatus.CANCELLED || order.status === OrderStatus.RETURNED) {
       res.status(400).json({ success: false, message: 'Only confirmed, paid orders can be synced to Shiprocket', data: order });
       return;
     }
