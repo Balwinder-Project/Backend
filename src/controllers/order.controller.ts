@@ -1020,9 +1020,9 @@ export const updateAdminOrderStatus = async (req: Request, res: Response): Promi
   }
 };
 
-// Shiprocket sends status labels in uppercase and also supplies numeric status IDs.
-// Keep transient events (delay, undelivered, RTO initiated) in the tracking fields
-// without falsely marking the customer order as delivered or returned.
+// Map only the human-readable current_status label to avoid mixing Shiprocket's
+// current_status_id and shipment_status_id code namespaces. Unknown events remain
+// visible in the tracking fields without changing the customer order status.
 const SHIPROCKET_STATUS_MAP: Record<string, string> = {
   'PICKUP PENDING': 'processing',
   'PICKUP SCHEDULED': 'processing',
