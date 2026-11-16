@@ -16,6 +16,7 @@ export interface ICheckoutSession extends Document {
   status: 'pending' | 'paid' | 'failed' | 'processing';
   razorpayPaymentId?: string;
   finalOrderId?: mongoose.Types.ObjectId;
+  lastReconciledAt?: Date;
   expiresAt: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -46,9 +47,11 @@ const checkoutSessionSchema = new Schema<ICheckoutSession>({
   status: { type: String, enum: ['pending', 'paid', 'failed', 'processing'], default: 'pending', index: true },
   razorpayPaymentId: { type: String },
   finalOrderId: { type: Schema.Types.ObjectId, ref: 'Order' },
+  lastReconciledAt: { type: Date },
   expiresAt: { type: Date, required: true },
 }, { timestamps: true });
 
 checkoutSessionSchema.index({ userId: 1, checkoutSessionId: 1 }, { unique: true });
+checkoutSessionSchema.index({ status: 1, lastReconciledAt: 1, createdAt: 1 });
 export default mongoose.models.CheckoutSession ||
   mongoose.model<ICheckoutSession>('CheckoutSession', checkoutSessionSchema);
