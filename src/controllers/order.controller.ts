@@ -763,15 +763,35 @@ async function finalizePaidCheckoutSession(session: ICheckoutSession, payment: a
 }
 
 async function reconcileRecentCheckoutSessions(userId?: string): Promise<void> {
-  const query: any = { status: { $in: ['pending', 'failed'] } };
+  // Rotate through all pending/failed sessions instead of repeatedly checking
+  // only the newest 20. A five-minute cooldown bounds Razorpay API calls while
+  // ensuring older missed payments are not starved by newer checkouts.
+  const retryBefore = new Date(Date.now() - 5 * 60 * 1000);
+  const query: any = {
+    status: { $in: ['pending', 'failed'] },
+    $or: [
+      { lastReconciledAt: { $exists: false } },
+      { lastReconciledAt: { $lte: retryBefore } },
+    ],
+  };
   if (userId) query.userId = userId;
-  const sessions = await CheckoutSession.find(query).sort({ createdAt: -1 }).limit(20);
+  const sessions = await CheckoutSession.find(query)
+    .sort({ lastReconciledAt: 1, createdAt: 1 })
+    .limit(20);
+
   await Promise.all(sessions.map(async (checkout) => {
     try {
       const payment = await findVerifiedCapturedPayment(checkout.razorpayOrderId, checkout.total);
       if (payment?.id) await finalizePaidCheckoutSession(checkout, payment);
     } catch (error: any) {
       console.error(`[razorpay session reconcile] ${checkout.checkoutSessionId}:`, error?.message || error);
+    } finally {
+      await CheckoutSession.updateOne(
+        { _id: checkout._id },
+        { $set: { lastReconciledAt: new Date() } },
+      ).catch((error: any) => {
+        console.error(`[razorpay session reconcile] cooldown update failed for ${checkout.checkoutSessionId}:`, error?.message || error);
+      });
     }
   }));
 }
@@ -811,13 +831,17 @@ export const razorpayWebhook = async (req: Request, res: Response): Promise<void
     res.status(400).json({ success: false, message: 'Invalid Razorpay webhook signature' });
     return;
   }
-  res.status(200).json({ success: true });
+
   try {
     const event = req.body?.event;
     const payment = req.body?.payload?.payment?.entity;
     const gatewayOrder = req.body?.payload?.order?.entity;
     const orderId = payment?.order_id || gatewayOrder?.id;
-    if (!orderId) return;
+    if (!orderId) {
+      // Acknowledge unrelated/malformed events only after deciding no work is required.
+      res.status(200).json({ success: true });
+      return;
+    }
 
     if (event === 'payment.failed') {
       await Promise.all([
@@ -830,16 +854,26 @@ export const razorpayWebhook = async (req: Request, res: Response): Promise<void
           { $set: { status: 'failed' } },
         ),
       ]);
+      res.status(200).json({ success: true });
       return;
     }
-    if (event !== 'payment.captured' && event !== 'order.paid') return;
+    if (event !== 'payment.captured' && event !== 'order.paid') {
+      res.status(200).json({ success: true });
+      return;
+    }
 
     const pending = await Order.findOne({ razorpayOrderId: orderId });
     if (pending) {
       const verifiedPayment = await findVerifiedCapturedPayment(orderId, pending.total);
-      if (!verifiedPayment?.id) return;
+      if (!verifiedPayment?.id) {
+        throw new Error(`Razorpay has not yet returned a verified captured payment for ${orderId}`);
+      }
       const linked = await Order.findOne({ razorpayPaymentId: verifiedPayment.id, _id: { $ne: pending._id } });
-      if (linked) return;
+      if (linked) {
+        console.error(`[razorpay webhook] payment ${verifiedPayment.id} is already linked to order ${linked.orderNumber}`);
+        res.status(200).json({ success: true, duplicate: true });
+        return;
+      }
       const confirmed = await Order.findOneAndUpdate(
         { _id: pending._id, status: { $in: [OrderStatus.PENDING, OrderStatus.CONFIRMED] }, paymentStatus: { $ne: 'paid' } },
         { $set: { status: OrderStatus.CONFIRMED, paymentStatus: 'paid', razorpayPaymentId: verifiedPayment.id } },
@@ -848,20 +882,29 @@ export const razorpayWebhook = async (req: Request, res: Response): Promise<void
       if (confirmed) pushOrderToShiprocket(confirmed).catch((error) =>
         console.error('[razorpay webhook] Shiprocket sync failed:', error?.message || error)
       );
+      res.status(200).json({ success: true });
       return;
     }
 
     const checkout = await CheckoutSession.findOne({ razorpayOrderId: orderId });
     if (!checkout) {
-      console.error(`[razorpay webhook] no checkout session found for ${orderId}`);
-      return;
+      // Return a retryable response: a transient database/read-after-write issue
+      // must not be acknowledged as successfully processed.
+      throw new Error(`No checkout session found for Razorpay order ${orderId}`);
     }
     const verifiedPayment = await findVerifiedCapturedPayment(orderId, checkout.total);
-    if (!verifiedPayment?.id) return;
+    if (!verifiedPayment?.id) {
+      throw new Error(`Razorpay has not yet returned a verified captured payment for ${orderId}`);
+    }
     await finalizePaidCheckoutSession(checkout, verifiedPayment);
 
+    // Acknowledge only after the paid order and checkout-session link are persisted.
+    res.status(200).json({ success: true });
   } catch (error: any) {
-    console.error('[razorpay webhook] processing failed:', error?.message || error);
+    console.error('[razorpay webhook] processing failed; asking Razorpay to retry:', error?.message || error);
+    if (!res.headersSent) {
+      res.status(500).json({ success: false, message: 'Payment webhook processing failed; retry requested' });
+    }
   }
 };
 
