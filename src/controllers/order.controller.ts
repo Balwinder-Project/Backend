@@ -1030,6 +1030,39 @@ export const updateAdminOrderStatus = async (req: Request, res: Response): Promi
       res.status(409).json({ success: false, message: 'Cannot process an unpaid Razorpay order. Verify payment first or cancel the order.' });
       return;
     }
+    // Cancel the Shiprocket order/shipment first. Only mark the BND order cancelled
+    // after Shiprocket confirms success; a failed remote cancellation must remain visible
+    // and must not leave the two systems in contradictory states.
+    if (status === OrderStatus.CANCELLED && currentOrder.status !== OrderStatus.CANCELLED) {
+      try {
+        if (currentOrder.shiprocketOrderId) {
+          const shiprocketOrderId = Number(currentOrder.shiprocketOrderId);
+          if (!Number.isSafeInteger(shiprocketOrderId) || shiprocketOrderId <= 0) {
+            res.status(409).json({ success: false, message: 'Stored Shiprocket order ID is invalid. Order was not cancelled.' });
+            return;
+          }
+          await ShiprocketService.cancelOrder(shiprocketOrderId);
+        } else if (currentOrder.awbCode) {
+          await ShiprocketService.cancelShipmentByAwb(currentOrder.awbCode);
+        } else if (currentOrder.shiprocketShipmentId) {
+          const shipmentId = Number(currentOrder.shiprocketShipmentId);
+          if (!Number.isSafeInteger(shipmentId) || shipmentId <= 0) {
+            res.status(409).json({ success: false, message: 'Stored Shiprocket shipment ID is invalid. Order was not cancelled.' });
+            return;
+          }
+          await ShiprocketService.cancelShipmentById(shipmentId);
+        }
+      } catch (shiprocketError: any) {
+        console.error(`[shiprocket cancel] order ${currentOrder.orderNumber} failed:`, shiprocketError?.message || shiprocketError);
+        res.status(502).json({
+          success: false,
+          message: shiprocketError?.message || 'Shiprocket cancellation failed. The BND order was not marked cancelled.',
+          shiprocketCancellationFailed: true,
+        });
+        return;
+      }
+    }
+
     const order = await OrderService.updateOrderStatusById(req.params.id, status);
 
     if (order) {
