@@ -1104,9 +1104,6 @@ export const shiprocketWebhook = async (req: Request, res: Response): Promise<vo
     return;
   }
 
-  // Shiprocket requires an HTTP 200 acknowledgement for accepted webhook calls.
-  res.status(200).json({ success: true });
-
   try {
     const payload = req.body || {};
     const track = payload?.shipment_track?.[0] || payload?.tracking_data?.shipment_track?.[0] || {};
@@ -1121,12 +1118,14 @@ export const shiprocketWebhook = async (req: Request, res: Response): Promise<vo
 
     if (!awb || !rawStatus) {
       console.warn('[shiprocket webhook] ignored payload without AWB/status');
+      res.status(200).json({ success: true, ignored: true });
       return;
     }
 
     const order = await Order.findOne({ awbCode: awb });
     if (!order) {
       console.warn(`[shiprocket webhook] no BND order found for AWB ${awb}`);
+      res.status(200).json({ success: true, ignored: true });
       return;
     }
 
@@ -1168,8 +1167,12 @@ export const shiprocketWebhook = async (req: Request, res: Response): Promise<vo
     }
 
     console.info(`[shiprocket webhook] ${order.orderNumber}: ${rawStatus} (AWB ${awb})`);
+    // Acknowledge only after the order update has been persisted. If processing
+    // fails, return 5xx so the provider can retry instead of silently losing it.
+    res.status(200).json({ success: true });
   } catch (error: any) {
     console.error('[shiprocket webhook] processing failed:', error?.message || error);
+    if (!res.headersSent) res.status(500).json({ success: false, message: 'Webhook processing failed' });
   }
 };
 
