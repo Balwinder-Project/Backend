@@ -126,7 +126,12 @@ export class ShiprocketService {
       throw new Error(`Shiprocket API error [${method} ${path}]: ${response.status} ${errBody}`);
     }
 
-    return response.json() as Promise<T>;
+    // Shiprocket cancellation endpoints commonly return HTTP 204 with no body.
+    // Treat an empty successful response as success instead of trying to parse JSON.
+    if (response.status === 204) return {} as T;
+    const responseText = await response.text();
+    if (!responseText) return {} as T;
+    return JSON.parse(responseText) as T;
   }
 
   static async getShippingRates(
@@ -157,6 +162,26 @@ export class ShiprocketService {
 
   static async createOrder(payload: ShiprocketOrderPayload): Promise<ShiprocketOrderResponse> {
     return this.request<ShiprocketOrderResponse>('POST', '/orders/create/adhoc', payload);
+  }
+
+  static async cancelOrder(shiprocketOrderId: number): Promise<any> {
+    if (!Number.isSafeInteger(shiprocketOrderId) || shiprocketOrderId <= 0) {
+      throw new Error('A valid Shiprocket order ID is required to cancel the order');
+    }
+    return this.request<any>('POST', '/orders/cancel', { ids: [shiprocketOrderId] });
+  }
+
+  static async cancelShipmentByAwb(awbCode: string): Promise<any> {
+    const normalizedAwb = String(awbCode || '').trim();
+    if (!normalizedAwb) throw new Error('A valid AWB is required to cancel the shipment');
+    return this.request<any>('POST', '/orders/cancel/shipment/awbs', { awbs: [normalizedAwb] });
+  }
+
+  static async cancelShipmentById(shipmentId: number): Promise<any> {
+    if (!Number.isSafeInteger(shipmentId) || shipmentId <= 0) {
+      throw new Error('A valid Shiprocket shipment ID is required to cancel the shipment');
+    }
+    return this.request<any>('POST', '/orders/cancel/shipment/awbs', { shipment_id: [shipmentId] });
   }
 
   static async getOrderTracking(awbCode: string): Promise<any> {
