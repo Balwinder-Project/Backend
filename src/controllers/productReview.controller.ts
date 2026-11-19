@@ -80,7 +80,7 @@ export const moderateReview = async (req: Request, res: Response): Promise<void>
 export const deleteReview = async (req: Request, res: Response): Promise<void> => {
   try {
     const review = await ProductReview.findByIdAndDelete(req.params.id);
-    if (!review) return res.status(404).json({success:false,message:'Review not found'});
+    if (!review) { res.status(404).json({success:false,message:'Review not found'}); return; }
     res.json({success:true,message:'Review deleted'});
   } catch (error:any) { res.status(500).json({success:false,message:error.message||'Failed to delete review'}); }
 };
