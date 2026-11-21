@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { PutObjectCommand } from '@aws-sdk/client-s3';
 import { randomUUID } from 'crypto';
 import WholesaleEnquiry from '../models/wholesaleEnquiry.model';
+import Retailer from '../models/retailer.model';
 import { uploadImageToB2 } from '../utils/imageUpload';
 import { s3Client, B2_BUCKET_NAME, B2_PUBLIC_URL } from '../config/b2';
 import { RetailerService } from '../services/retailer.service';
@@ -144,6 +145,22 @@ export const approveWholesaleEnquiry = async (req: Request, res: Response): Prom
     if (enquiry.status === 'approved' && enquiry.retailerId) {
       const existingRetailer = await RetailerService.getRetailerById(String(enquiry.retailerId));
       res.json({ success: true, message: 'This enquiry has already been approved', data: { enquiry, retailer: existingRetailer, alreadyApproved: true } });
+      return;
+    }
+
+    // If a retailer record already exists for this email, link the enquiry to it
+    // instead of trying to create a duplicate Firebase/MongoDB account.
+    const normalizedEmail = clean(req.body.email || enquiry.email).toLowerCase();
+    const existingRetailer = await Retailer.findOne({ email: normalizedEmail });
+    if (existingRetailer) {
+      enquiry.status = 'approved';
+      enquiry.retailerId = existingRetailer._id as any;
+      await enquiry.save();
+      res.json({
+        success: true,
+        message: 'Wholesale enquiry approved and linked to the existing wholesaler account',
+        data: { enquiry, retailer: existingRetailer, alreadyApproved: true },
+      });
       return;
     }
 
