@@ -54,14 +54,29 @@ export class RetailerService {
   static async createRetailer(data: CreateRetailerData): Promise<IRetailer> {
     let firebaseUid: string | null = null;
 
+    let createdFirebaseUser = false;
     try {
-      // Create user in Firebase Auth
-      const userRecord = await auth.createUser({
-        email: data.email,
-        password: data.password,
-        displayName: data.name,
-        emailVerified: false
-      });
+      // Reuse an existing Firebase account for this email if present.
+      // This avoids duplicate-email failures when an auth account exists
+      // but the MongoDB wholesaler record is missing.
+      let userRecord;
+      try {
+        userRecord = await auth.getUserByEmail(data.email.trim().toLowerCase());
+      } catch (lookupError: any) {
+        if (lookupError.code !== 'auth/user-not-found') throw lookupError;
+      }
+
+      if (!userRecord) {
+        userRecord = await auth.createUser({
+          email: data.email.trim().toLowerCase(),
+          password: data.password,
+          displayName: data.name,
+          emailVerified: false
+        });
+        createdFirebaseUser = true;
+      } else {
+        await auth.updateUser(userRecord.uid, { displayName: data.name });
+      }
 
       firebaseUid = userRecord.uid;
 
@@ -103,8 +118,9 @@ export class RetailerService {
 
       return retailer;
     } catch (error: any) {
-      // Rollback: Delete Firebase user if MongoDB creation fails
-      if (firebaseUid) {
+      // Rollback only Firebase users created in this call; never delete
+      // an existing account that we reused.
+      if (firebaseUid && createdFirebaseUser) {
         try {
           await auth.deleteUser(firebaseUid);
         } catch (deleteError) {
