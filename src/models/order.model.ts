@@ -45,6 +45,7 @@ export interface IOrder extends Document {
   walletTransactionId?: mongoose.Types.ObjectId;
   razorpayOrderId?: string;
   razorpayPaymentId?: string;
+  razorpayLastReconciledAt?: Date;
   checkoutSessionId?: string;
   checkoutFingerprint?: string;
   paymentStatus?: 'pending' | 'paid' | 'failed' | 'refunded';
@@ -147,6 +148,7 @@ const orderSchema = new Schema<IOrder>(
     },
     razorpayOrderId: { type: String, unique: true, sparse: true },
     razorpayPaymentId: { type: String },
+    razorpayLastReconciledAt: { type: Date },
     checkoutSessionId: { type: String, unique: true, sparse: true },
     checkoutFingerprint: { type: String },
     paymentStatus: { type: String, enum: ['pending', 'paid', 'failed', 'refunded'], default: 'paid', index: true },
@@ -194,6 +196,7 @@ const orderSchema = new Schema<IOrder>(
 
 orderSchema.index({ orderNumber: 1 }, { unique: true });
 orderSchema.index({ status: 1 });
+orderSchema.index({ paymentMethod: 1, paymentStatus: 1, razorpayLastReconciledAt: 1, createdAt: 1 });
 
 orderSchema.pre('save', async function (next) {
   if (this.isNew && !this.orderNumber) {
