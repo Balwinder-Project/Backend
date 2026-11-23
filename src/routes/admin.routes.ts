@@ -7,9 +7,6 @@ import {
   updateAdminPermissions,
 } from '../controllers/admin.controller';
 import { authenticateUser, requireAdmin, requireAdminPermission } from '../middleware/auth.middleware';
-
-
-// Production staff accounts are managed only by Owner accounts.
 import { listProductionStaff, createProductionStaff, deleteProductionStaff } from '../controllers/production.controller';
 
 const router = Router();
