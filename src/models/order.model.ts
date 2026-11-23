@@ -59,18 +59,25 @@ export interface IOrder extends Document {
   awbCode?: string;
   courierName?: string;
   estimatedDeliveryDate?: Date;
+  shiprocketCurrentStatus?: string;
+  shiprocketCurrentStatusId?: number;
+  shiprocketShipmentStatus?: string;
+  shiprocketLastTrackingAt?: Date;
+  shiprocketUndeliveredReason?: string;
+  shiprocketReturnAwbCode?: string;
   trackingUrl?: string;
+  shiprocketPickupStatus?: 'pending' | 'scheduled' | 'failed';
+  shiprocketPickupDate?: Date;
+  shiprocketPickupToken?: string;
+  shiprocketPickupError?: string;
+  shiprocketManifestUrl?: string;
+  shiprocketManifestGeneratedAt?: Date;
   notes?: string;
   incentiveSalesmanId?: mongoose.Types.ObjectId;
   productionAssignment?: {
-    staffUid: string;
-    staffName: string;
-    staffEmail: string;
-    assignedBy: string;
-    assignedAt: Date;
+    staffUid: string; staffName: string; staffEmail: string; assignedBy: string; assignedAt: Date;
     workflowStatus: 'design_check' | 'printing' | 'cutting' | 'packing' | 'ready_for_dispatch';
-    updatedAt: Date;
-    remarks?: string;
+    updatedAt: Date; remarks?: string;
     history: Array<{ status: string; changedBy: string; changedAt: Date; remarks?: string; staffUid?: string; staffName?: string }>;
   };
   createdAt: Date;
@@ -164,25 +171,30 @@ const orderSchema = new Schema<IOrder>(
     awbCode: { type: String, index: true },
     courierName: { type: String },
     estimatedDeliveryDate: { type: Date },
+    shiprocketCurrentStatus: { type: String },
+    shiprocketCurrentStatusId: { type: Number },
+    shiprocketShipmentStatus: { type: String },
+    shiprocketLastTrackingAt: { type: Date },
+    shiprocketUndeliveredReason: { type: String },
+    shiprocketReturnAwbCode: { type: String },
     trackingUrl: { type: String },
+    shiprocketPickupStatus: { type: String, enum: ['pending', 'scheduled', 'failed'] },
+    shiprocketPickupDate: { type: Date },
+    shiprocketPickupToken: { type: String },
+    shiprocketPickupError: { type: String },
+    shiprocketManifestUrl: { type: String },
+    shiprocketManifestGeneratedAt: { type: Date },
     notes: { type: String },
     incentiveSalesmanId: { type: Schema.Types.ObjectId, ref: 'Salesman', index: true, immutable: true },
     productionAssignment: {
-      staffUid: { type: String, index: true },
-      staffName: { type: String },
-      staffEmail: { type: String },
-      assignedBy: { type: String },
-      assignedAt: { type: Date },
+      staffUid: { type: String, index: true }, staffName: { type: String }, staffEmail: { type: String },
+      assignedBy: { type: String }, assignedAt: { type: Date },
       workflowStatus: { type: String, enum: ['design_check', 'printing', 'cutting', 'packing', 'ready_for_dispatch'], default: 'design_check' },
-      updatedAt: { type: Date },
-      remarks: { type: String, maxlength: 1000 },
+      updatedAt: { type: Date }, remarks: { type: String, maxlength: 1000 },
       history: [{
         status: { type: String, enum: ['assigned', 'design_check', 'printing', 'cutting', 'packing', 'ready_for_dispatch'] },
-        changedBy: { type: String },
-        changedAt: { type: Date },
-        remarks: { type: String, maxlength: 1000 },
-        staffUid: { type: String },
-        staffName: { type: String },
+        changedBy: { type: String }, changedAt: { type: Date }, remarks: { type: String, maxlength: 1000 },
+        staffUid: { type: String }, staffName: { type: String },
       }],
     },
   },
