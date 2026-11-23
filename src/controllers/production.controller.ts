@@ -9,7 +9,7 @@ type WorkflowStatus = typeof WORKFLOW[number];
 const isProductionStaff = (req: Request) => req.user?.role === 'production_staff';
 
 const safeVariantForProduction = (variant: any) => {
-  if (typeof variant === 'string') return variant.slice(0, 2000);
+  if (typeof variant === 'string') return undefined;
   if (!variant || typeof variant !== 'object') return undefined;
   const fields = variant.customFields && typeof variant.customFields === 'object' ? variant.customFields : variant;
   const allowedKey = /^(size|width|height|dimensions|color|colour|material|finish|text|name|font|design|option|variant|customization|customisation|quantity|type)$/i;
@@ -153,7 +153,7 @@ export const getAssignedProductionOrders = async (req: Request, res: Response): 
 
 export const updateProductionProgress = async (req: Request, res: Response): Promise<void> => {
   try {
-    if (!isProductionStaff(req)) { res.status(403).json({ success: false, message: 'Production staff access required.' }); return; }
+    if (!isProductionStaff(req) || !(await verifyActiveStaff(req.user!.uid))) { res.status(403).json({ success: false, message: 'Active production staff access required.' }); return; }
     const { orderId } = req.params;
     const workflowStatus = req.body?.workflowStatus as WorkflowStatus;
     const remarks = String(req.body?.remarks || '').trim().slice(0, 1000);
