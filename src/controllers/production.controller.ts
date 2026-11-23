@@ -9,14 +9,18 @@ type WorkflowStatus = typeof WORKFLOW[number];
 const isProductionStaff = (req: Request) => req.user?.role === 'production_staff';
 
 const safeVariantForProduction = (variant: any) => {
-  if (!variant || typeof variant !== 'object') return typeof variant === 'string' ? variant : undefined;
+  if (typeof variant === 'string') return variant.slice(0, 2000);
+  if (!variant || typeof variant !== 'object') return undefined;
   const fields = variant.customFields && typeof variant.customFields === 'object' ? variant.customFields : variant;
-  const safeFields = Object.fromEntries(Object.entries(fields).filter(([key, value]) => {
-    const normalized = key.toLowerCase().replace(/[^a-z0-9]/g, '');
-    return !/(price|amount|cost|discount|payment|subtotal|total|margin|profit|tax|shipping)/.test(normalized)
-      && (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean');
-  }));
-  return safeFields;
+  const allowedKey = /^(size|width|height|dimensions|color|colour|material|finish|text|name|font|design|option|variant|customization|customisation|quantity|type)$/i;
+  return Object.fromEntries(Object.entries(fields).filter(([key, value]) =>
+    allowedKey.test(key) && (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean')
+  ));
+};
+
+const verifyActiveStaff = async (uid: string) => {
+  const user = await auth.getUser(uid);
+  return !user.disabled && user.customClaims?.role === 'production_staff';
 };
 
 const staffSafeOrder = (order: any) => ({
