@@ -60,8 +60,14 @@ const staffSafeOrder = (order: any) => ({
 
 export const listProductionStaff = async (_req: Request, res: Response): Promise<void> => {
   try {
-    const result = await auth.listUsers(1000);
-    const staff = result.users
+    const users: any[] = [];
+    let nextPageToken: string | undefined;
+    do {
+      const page = await auth.listUsers(1000, nextPageToken);
+      users.push(...page.users);
+      nextPageToken = page.pageToken;
+    } while (nextPageToken);
+    const staff = users
       .filter(user => user.customClaims?.role === 'production_staff')
       .map(user => ({
         uid: user.uid, email: user.email, displayName: user.displayName,
