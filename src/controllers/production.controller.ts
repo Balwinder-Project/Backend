@@ -129,7 +129,7 @@ export const assignProductionOrder = async (req: Request, res: Response): Promis
       staffUid, staffName: staff.displayName || staff.email || 'Production Staff',
       staffEmail: staff.email || '', assignedBy: req.user?.uid || '',
       assignedAt: now, workflowStatus: 'design_check', updatedAt: now,
-      history: [...priorHistory, { status: 'assigned', changedBy: req.user?.uid || '', changedAt: now }],
+      history: [...priorHistory, { status: 'assigned', changedBy: req.user?.uid || '', changedAt: now, staffUid, staffName: staff.displayName || staff.email || 'Production Staff' }],
     };
     await order.save();
     res.status(200).json({ success: true, message: 'Order assigned to production staff.', data: { orderId: String(order._id), staffUid, staffName: order.productionAssignment.staffName, workflowStatus: 'design_check' } });
