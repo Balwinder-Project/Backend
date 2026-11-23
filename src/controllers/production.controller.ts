@@ -140,7 +140,7 @@ export const assignProductionOrder = async (req: Request, res: Response): Promis
 
 export const getAssignedProductionOrders = async (req: Request, res: Response): Promise<void> => {
   try {
-    if (!isProductionStaff(req)) { res.status(403).json({ success: false, message: 'Production staff access required.' }); return; }
+    if (!isProductionStaff(req) || !(await verifyActiveStaff(req.user!.uid))) { res.status(403).json({ success: false, message: 'Active production staff access required.' }); return; }
     const orders = await Order.find({ 'productionAssignment.staffUid': req.user!.uid })
       .populate({ path: 'items.productId', select: 'images designImage' })
       .sort({ 'productionAssignment.updatedAt': -1, createdAt: -1 })
