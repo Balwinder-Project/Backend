@@ -8,6 +8,17 @@ type WorkflowStatus = typeof WORKFLOW[number];
 
 const isProductionStaff = (req: Request) => req.user?.role === 'production_staff';
 
+const safeVariantForProduction = (variant: any) => {
+  if (!variant || typeof variant !== 'object') return typeof variant === 'string' ? variant : undefined;
+  const fields = variant.customFields && typeof variant.customFields === 'object' ? variant.customFields : variant;
+  const safeFields = Object.fromEntries(Object.entries(fields).filter(([key, value]) => {
+    const normalized = key.toLowerCase().replace(/[^a-z0-9]/g, '');
+    return !/(price|amount|cost|discount|payment|subtotal|total|margin|profit|tax|shipping)/.test(normalized)
+      && (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean');
+  }));
+  return safeFields;
+};
+
 const staffSafeOrder = (order: any) => ({
   id: String(order._id),
   orderNumber: order.orderNumber,
@@ -19,7 +30,7 @@ const staffSafeOrder = (order: any) => ({
       name: item.name,
       sku: item.sku,
       quantity: item.quantity,
-      variant: item.variant,
+      variant: safeVariantForProduction(item.variant),
       previewImage: product?.images?.[0] || product?.designImage || null,
     };
   }),
