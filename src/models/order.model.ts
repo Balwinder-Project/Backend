@@ -71,7 +71,7 @@ export interface IOrder extends Document {
     workflowStatus: 'design_check' | 'printing' | 'cutting' | 'packing' | 'ready_for_dispatch';
     updatedAt: Date;
     remarks?: string;
-    history: Array<{ status: string; changedBy: string; changedAt: Date; remarks?: string }>;
+    history: Array<{ status: string; changedBy: string; changedAt: Date; remarks?: string; staffUid?: string; staffName?: string }>;
   };
   createdAt: Date;
   updatedAt: Date;
@@ -181,6 +181,8 @@ const orderSchema = new Schema<IOrder>(
         changedBy: { type: String },
         changedAt: { type: Date },
         remarks: { type: String, maxlength: 1000 },
+        staffUid: { type: String },
+        staffName: { type: String },
       }],
     },
   },
