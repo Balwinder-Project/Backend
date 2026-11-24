@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import Cart from '../models/cart.model';
 import User from '../models/user.model';
 
-const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\\]\\]/g, '\\const escapeRegex = (value: string) => value.replace(/[.*+?^$()|{}[\]\\]/g, '\\$&');');
+const escapeRegex = (value: string) => value.split('').map((ch) => '^$.*+?()[]{}|\\'.includes(ch) ? '\\' + ch : ch).join('');
 
 export const listCustomerCarts = async (req: Request, res: Response): Promise<void> => {
   try {
