@@ -26,6 +26,7 @@ import cartRoutes from './cart.routes';
 import salesIncentiveRoutes from './salesIncentive.routes';
 import wholesaleEnquiryRoutes from './wholesaleEnquiry.routes';
 import productReviewRoutes from './productReview.routes';
+import productionRoutes from './production.routes';
 import cartPrintSettingsRoutes from './cartPrintSettings.routes';
 import adminCartRoutes from './adminCart.routes';
 
@@ -41,6 +42,7 @@ router.use(`${API_VERSION}/cart`, cartRoutes);
 router.use(`${API_VERSION}/sales-incentives`, salesIncentiveRoutes);
 router.use(`${API_VERSION}/wholesale-enquiries`, wholesaleEnquiryRoutes);
 router.use(`${API_VERSION}/reviews`, productReviewRoutes);
+router.use(`${API_VERSION}/production`, productionRoutes);
 router.use(`${API_VERSION}/cart-print-settings`, cartPrintSettingsRoutes);
 router.use(`${API_VERSION}/admin-carts`, adminCartRoutes);
 router.use(`${API_VERSION}/users`, userRoutes);
