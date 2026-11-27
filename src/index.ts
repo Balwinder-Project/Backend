@@ -6,6 +6,7 @@ dotenv.config();
 import app from './app';
 import { connectDatabase, disconnectDatabase } from './config/database';
 import { startShiprocketRetryWorker, stopShiprocketRetryWorker } from './services/shiprocketRetryWorker';
+import { startRazorpayReconciliationWorker, stopRazorpayReconciliationWorker } from './services/razorpayReconciliationWorker';
 
 const PORT = process.env.PORT || 9000;
 
@@ -13,6 +14,7 @@ const startServer = async (): Promise<void> => {
   try {
     await connectDatabase();
     startShiprocketRetryWorker();
+    startRazorpayReconciliationWorker();
 
     const server = app.listen(PORT, () => {
       console.log(`🚀 Server is running on port ${PORT}`);
@@ -23,6 +25,7 @@ const startServer = async (): Promise<void> => {
     const shutdown = async (signal: string) => {
       console.log(`\n${signal} received. Closing server and database connection...`);
       stopShiprocketRetryWorker();
+      stopRazorpayReconciliationWorker();
       server.close(() => {
         console.log('HTTP server closed.');
       });

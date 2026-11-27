@@ -823,6 +823,50 @@ async function reconcileCapturedRazorpayOrder(order: IOrder): Promise<IOrder | n
   return confirmed;
 }
 
+/**
+ * Background recovery entry point. It reconciles both checkout sessions that
+ * have not yet produced an Order and legacy/pending Razorpay Orders whose
+ * captured payment was not reflected in MongoDB. Razorpay's API remains the
+ * source of truth; amount, INR currency, gateway order ID and captured status
+ * are checked by the shared verification helper before any order is finalized.
+ */
+export async function runRazorpayReconciliationSweep(): Promise<void> {
+  await reconcileRecentCheckoutSessions();
+
+  const retryBefore = new Date(Date.now() - 5 * 60 * 1000);
+  const candidates = await Order.find({
+    paymentMethod: 'razorpay',
+    paymentStatus: { $ne: 'paid' },
+    status: { $in: [OrderStatus.PENDING, OrderStatus.CONFIRMED] },
+    razorpayOrderId: { $exists: true, $ne: '' },
+    $or: [
+      { razorpayLastReconciledAt: { $exists: false } },
+      { razorpayLastReconciledAt: { $lte: retryBefore } },
+    ],
+  })
+    .sort({ razorpayLastReconciledAt: 1, createdAt: 1 })
+    .limit(20);
+
+  for (const order of candidates) {
+    try {
+      await reconcileCapturedRazorpayOrder(order);
+    } catch (error: any) {
+      console.error(`[razorpay worker] unable to reconcile ${order.orderNumber}:`, error?.message || error);
+    } finally {
+      await Order.updateOne(
+        { _id: order._id },
+        { $set: { razorpayLastReconciledAt: new Date() } },
+      ).catch((error: any) => {
+        console.error(`[razorpay worker] cooldown update failed for ${order.orderNumber}:`, error?.message || error);
+      });
+    }
+  }
+
+  if (candidates.length) {
+    console.info(`[razorpay worker] checked ${candidates.length} pending Razorpay orders`);
+  }
+}
+
 /** Recover captured payments even if the customer closes the browser. */
 export const razorpayWebhook = async (req: Request, res: Response): Promise<void> => {
   const rawBody: Buffer | undefined = (req as any).rawBody;
